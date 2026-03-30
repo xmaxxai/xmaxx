@@ -20,6 +20,9 @@ const navLinks = [
   { label: 'Stack', href: '#stack' },
 ]
 
+const xmaxxGptUrl =
+  'https://chatgpt.com/g/g-69ca32256f08819189506732a7541301-xmaxx'
+
 const metrics = [
   {
     value: '24/7',
@@ -970,6 +973,14 @@ function App() {
                 onClick={() => setIsBriefOpen(true)}
               >
                 Book a build conversation
+              </InteractiveLink>
+              <InteractiveLink
+                className="button button--ghost"
+                href={xmaxxGptUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Open the XMAXX GPT
               </InteractiveLink>
               <InteractiveLink className="button button--ghost" href="#focus">
                 Explore the focus deck
