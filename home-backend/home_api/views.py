@@ -6,15 +6,29 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from urllib.request import Request, urlopen
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import connection
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect
+from django.views.decorators.csrf import ensure_csrf_cookie
+from django.views.decorators.http import require_http_methods
+
+from .models import Profile
 
 logger = logging.getLogger(__name__)
 
 PROVIDER_LABELS = {
     "github": "GitHub",
     "google": "Google",
+}
+
+PROFILE_FIELD_MAP = {
+    "displayName": "display_name",
+    "headline": "headline",
+    "bio": "bio",
+    "location": "location",
+    "company": "company",
+    "websiteUrl": "website_url",
 }
 
 
@@ -217,6 +231,144 @@ def _json_no_store(payload, *, status=200):
     return response
 
 
+def _profile_key_from_model(field_name):
+    for client_key, model_key in PROFILE_FIELD_MAP.items():
+        if model_key == field_name:
+            return client_key
+
+    return field_name
+
+
+def _profile_identity(request):
+    auth_user, auth_provider = _session_auth_context(request)
+
+    if not auth_user or not auth_provider:
+        return None, _json_no_store(
+            {
+                "error": "not_authenticated",
+                "detail": "Sign in before working with the profile workspace.",
+            },
+            status=401,
+        )
+
+    provider_user_id = str(auth_user.get("id") or "").strip()
+
+    if not provider_user_id:
+        return None, _json_no_store(
+            {
+                "error": "missing_provider_user_id",
+                "detail": "The current session is missing the provider user identifier.",
+            },
+            status=400,
+        )
+
+    return (
+        {
+            "provider": auth_provider,
+            "provider_user_id": provider_user_id,
+            "auth_email": (auth_user.get("email") or "").strip(),
+            "auth_login": (auth_user.get("login") or "").strip(),
+            "auth_name": (auth_user.get("name") or "").strip(),
+            "auth_avatar_url": (auth_user.get("avatar_url") or "").strip(),
+            "auth_profile_url": (auth_user.get("profile_url") or "").strip(),
+        },
+        None,
+    )
+
+
+def _profile_queryset(identity):
+    return Profile.objects.filter(
+        provider=identity["provider"],
+        provider_user_id=identity["provider_user_id"],
+    )
+
+
+def _profile_payload(request):
+    if not request.body:
+        return {}, None
+
+    try:
+        payload = json.loads(request.body.decode("utf-8"))
+    except json.JSONDecodeError:
+        return None, _json_no_store(
+            {
+                "error": "invalid_json",
+                "detail": "Profile requests must send a valid JSON object.",
+            },
+            status=400,
+        )
+
+    if not isinstance(payload, dict):
+        return None, _json_no_store(
+            {
+                "error": "invalid_json",
+                "detail": "Profile requests must send a JSON object payload.",
+            },
+            status=400,
+        )
+
+    unknown_fields = sorted(set(payload) - set(PROFILE_FIELD_MAP))
+
+    if unknown_fields:
+        return None, _json_no_store(
+            {
+                "error": "unknown_fields",
+                "detail": "The request included unsupported profile fields.",
+                "fields": unknown_fields,
+            },
+            status=400,
+        )
+
+    normalized = {}
+
+    for client_key, model_key in PROFILE_FIELD_MAP.items():
+        if client_key not in payload:
+            continue
+
+        value = payload[client_key]
+        normalized[model_key] = str(value).strip() if value is not None else ""
+
+    return normalized, None
+
+
+def _profile_response(profile):
+    return {
+        "id": profile.id,
+        "displayName": profile.display_name,
+        "headline": profile.headline,
+        "bio": profile.bio,
+        "location": profile.location,
+        "company": profile.company,
+        "websiteUrl": profile.website_url,
+        "createdAt": profile.created_at.isoformat(),
+        "updatedAt": profile.updated_at.isoformat(),
+    }
+
+
+def _profile_validation_error(exc):
+    message_dict = getattr(exc, "message_dict", {})
+
+    if message_dict:
+        fields = {
+            _profile_key_from_model(field_name): messages
+            for field_name, messages in message_dict.items()
+        }
+        detail = "The submitted profile fields did not pass validation."
+    else:
+        fields = {}
+        detail = "The submitted profile data did not pass validation."
+
+    return _json_no_store(
+        {
+            "error": "validation_error",
+            "detail": detail,
+            "fields": fields,
+            "messages": exc.messages,
+        },
+        status=400,
+    )
+
+
 def _oauth_popup_response(provider, next_path, params):
     redirect_url = _append_query(next_path, {"auth": provider, **params})
     payload = {
@@ -243,13 +395,12 @@ def _oauth_popup_response(provider, next_path, params):
         try {{
           window.opener.postMessage(payload, window.location.origin);
           window.close();
-          return;
         }} catch (error) {{
-          // Fall through to the redirect below if the opener handshake fails.
+          window.location.replace(redirectUrl);
         }}
+      }} else {{
+        window.location.replace(redirectUrl);
       }}
-
-      window.location.replace(redirectUrl);
     </script>
   </body>
 </html>"""
