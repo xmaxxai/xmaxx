@@ -1,8 +1,9 @@
 import json
 
-from django.test import SimpleTestCase, TestCase
+from django.contrib.sessions.middleware import SessionMiddleware
+from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
 
-from home_api.views import _oauth_popup_response
+from home_api.views import _oauth_popup_response, github_login
 
 
 class OAuthPopupResponseTests(SimpleTestCase):
@@ -14,6 +15,25 @@ class OAuthPopupResponseTests(SimpleTestCase):
         self.assertContains(response, "window.close();")
         self.assertContains(response, "} else {")
         self.assertNotIn("return;", content)
+        self.assertEqual(response["Cross-Origin-Opener-Policy"], "unsafe-none")
+
+
+class OAuthPopupLoginTests(SimpleTestCase):
+    @override_settings(
+        SESSION_ENGINE="django.contrib.sessions.backends.signed_cookies",
+        GITHUB_OAUTH_CLIENT_ID="test-github-client-id",
+        GITHUB_OAUTH_CLIENT_SECRET="test-github-client-secret",
+        GITHUB_OAUTH_REDIRECT_URI="https://xmaxx.ai/api/auth/github/callback/",
+    )
+    def test_popup_login_redirect_preserves_opener(self):
+        request = RequestFactory().get("/api/auth/github/login/", {"popup": "1", "next": "/"})
+        SessionMiddleware(lambda req: None).process_request(request)
+        request.session.save()
+        response = github_login(request)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response["Cross-Origin-Opener-Policy"], "unsafe-none")
+        self.assertIn("https://github.com/login/oauth/authorize", response["Location"])
 
 
 class ProfileApiTests(TestCase):

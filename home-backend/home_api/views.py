@@ -231,6 +231,13 @@ def _json_no_store(payload, *, status=200):
     return response
 
 
+def _oauth_popup_response_headers(response):
+    # Keep the popup in the same browsing context group as the opener page so
+    # the callback can still postMessage back after the provider round-trip.
+    response["Cross-Origin-Opener-Policy"] = "unsafe-none"
+    return response
+
+
 def _profile_key_from_model(field_name):
     for client_key, model_key in PROFILE_FIELD_MAP.items():
         if model_key == field_name:
@@ -406,7 +413,7 @@ def _oauth_popup_response(provider, next_path, params):
 </html>"""
     )
     response["Cache-Control"] = "no-store"
-    return response
+    return _oauth_popup_response_headers(response)
 
 
 def _oauth_complete(request, provider, next_path, *, popup=False, **params):
@@ -448,7 +455,12 @@ def _oauth_login(request, provider):
         },
     )
 
-    return redirect(authorize_url)
+    response = redirect(authorize_url)
+
+    if popup:
+        return _oauth_popup_response_headers(response)
+
+    return response
 
 
 def _oauth_callback(request, provider):
