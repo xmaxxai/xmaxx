@@ -22,7 +22,6 @@ env:
   djangoTimeZone: UTC
   githubOauthRedirectUri: "https://xmaxx.ai/api/auth/github/callback/"
   githubOauthScopes: "read:user,user:email"
-  githubOauthSecretFile: /var/run/secrets/github/oauth/client-secret
   runMigrationsOnStartup: "true"
   databaseStartupMaxAttempts: "60"
   databaseStartupDelaySeconds: "2"

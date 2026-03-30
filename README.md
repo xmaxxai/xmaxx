@@ -44,11 +44,11 @@ Start here:
 
 ## App Config Notes
 
-The `home-backend` GitHub OAuth secret can be supplied either as a direct env var or as a mounted file. In Kubernetes, the Helm chart mounts the secret file into the backend pod at `/var/run/secrets/github/oauth/client-secret`.
+The `home-backend` GitHub OAuth secret is supplied as `GITHUB_OAUTH_CLIENT_SECRET` through the Kubernetes secret/env path.
 
 Important constraint:
 
-- that mounted file must contain the raw GitHub OAuth client secret string
+- `GITHUB_OAUTH_CLIENT_SECRET` must be the raw GitHub OAuth client secret value
 - a PEM or certificate file is not a valid GitHub OAuth client secret
 
 The detailed app config and deploy-time secret guidance lives in `home-backend/README.md`.

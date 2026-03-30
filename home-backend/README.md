@@ -29,7 +29,6 @@ The backend reads configuration from the repo-root `.env` file, including:
 - `GITHUB_WEBHOOK_SECRET`
 - `GITHUB_OAUTH_CLIENT_ID`
 - `GITHUB_OAUTH_CLIENT_SECRET`
-- `GITHUB_OAUTH_SECRET_FILE`
 - `GITHUB_OAUTH_REDIRECT_URI`
 - `GITHUB_OAUTH_SCOPES`
 
@@ -39,43 +38,23 @@ For GitHub integration:
 
 - `GITHUB_WEBHOOK_SECRET` is a local signing secret used to verify webhook payloads
 - `GITHUB_OAUTH_CLIENT_ID` must come from a GitHub OAuth App
-- `GITHUB_OAUTH_CLIENT_SECRET` can stay empty if `GITHUB_OAUTH_SECRET_FILE` points at a local secret file
-- `GITHUB_OAUTH_SECRET_FILE` must point at a file that contains only the raw GitHub client secret string
-- a certificate or PEM file is not a valid OAuth client secret and will leave GitHub auth in `not_configured`
-- the recommended local filename is `home-backend/github_oauth_client_secret.txt`
+- `GITHUB_OAUTH_CLIENT_SECRET` must be set to the actual GitHub OAuth client secret value
 - `GITHUB_OAUTH_REDIRECT_URI` should match the callback URL configured in GitHub
 
 Example repo-root `.env` values:
 
 ```dotenv
 GITHUB_OAUTH_CLIENT_ID=Iv23liF9YHQXRm2XBNDZ
-GITHUB_OAUTH_CLIENT_SECRET=
-GITHUB_OAUTH_SECRET_FILE=home-backend/github_oauth_client_secret.txt
+GITHUB_OAUTH_CLIENT_SECRET=your_real_github_client_secret
 GITHUB_OAUTH_REDIRECT_URI=https://xmaxx.ai/api/auth/github/callback/
 GITHUB_OAUTH_SCOPES=read:user,user:email
 ```
 
 ## App Config Guide
 
-The backend supports two valid ways to provide the GitHub OAuth client secret:
+The backend now expects the GitHub OAuth client secret only through the `GITHUB_OAUTH_CLIENT_SECRET` environment variable.
 
-1. Set `GITHUB_OAUTH_CLIENT_SECRET` directly in `.env`.
-2. Leave `GITHUB_OAUTH_CLIENT_SECRET` empty and set `GITHUB_OAUTH_SECRET_FILE` to a local file that contains only the client secret string.
-
-For Kubernetes deploys, the second option is rendered into a Kubernetes `Secret` and mounted into the backend pod as a file volume.
-
-The live pod path is:
-
-- `/var/run/secrets/github/oauth/client-secret`
-
-The backend reads that path through:
-
-- `GITHUB_OAUTH_SECRET_FILE=/var/run/secrets/github/oauth/client-secret`
-
-The Helm chart already mounts that volume in the backend container. The relevant pieces are:
-
-- `home-backend/chart/templates/secret.yaml`
-- `home-backend/chart/templates/deployment.yaml`
+For Kubernetes deploys, the Helm chart renders `GITHUB_OAUTH_CLIENT_SECRET` into the Kubernetes `Secret` and exposes it directly as an environment variable in the backend container.
 
 Deploy-time example:
 
@@ -84,19 +63,14 @@ KUBECONFIG=xmaxx-infra/kubeconfig.yaml helm upgrade --install home-backend ./hom
   --namespace home \
   --reuse-values \
   --set-string secrets.githubOauthClientId="$GITHUB_OAUTH_CLIENT_ID" \
-  --set-file secrets.githubOauthClientSecret="$GITHUB_OAUTH_SECRET_FILE" \
+  --set-string secrets.githubOauthClientSecret="$GITHUB_OAUTH_CLIENT_SECRET" \
   --set-string env.githubOauthRedirectUri="$GITHUB_OAUTH_REDIRECT_URI"
 ```
-
-This writes the local secret-file contents into the Kubernetes `Secret` key `GITHUB_OAUTH_CLIENT_SECRET`, then mounts that key into the pod at `/var/run/secrets/github/oauth/client-secret`.
 
 Verification commands:
 
 ```bash
-KUBECONFIG=xmaxx-infra/kubeconfig.yaml kubectl -n home exec deploy/home-backend -- sh -lc '
-  printf "secret_file=%s\n" "$GITHUB_OAUTH_SECRET_FILE"
-  wc -c < "$GITHUB_OAUTH_SECRET_FILE"
-'
+KUBECONFIG=xmaxx-infra/kubeconfig.yaml kubectl -n home exec deploy/home-backend -- sh -lc 'printenv GITHUB_OAUTH_CLIENT_ID && printenv GITHUB_OAUTH_CLIENT_SECRET | wc -c'
 
 curl -ksS https://xmaxx.ai/api/auth/session/
 curl -ksSI 'https://xmaxx.ai/api/auth/github/login/?next=/'
@@ -119,8 +93,7 @@ The backend chart lives in `home-backend/chart/`.
 The chart creates:
 
 - a Kubernetes `Secret` for runtime env values
-- a mounted secret file for `GITHUB_OAUTH_SECRET_FILE`
 - a `Deployment`
 - a `Service`
 
-For deploy time, pass the local secret file with `--set-file secrets.githubOauthClientSecret=/path/to/client-secret-file` so the secret file becomes a mounted volume in the pod. That file must contain the GitHub OAuth client secret string, not a PEM certificate.
+For deploy time, pass the client secret directly with `--set-string secrets.githubOauthClientSecret="$GITHUB_OAUTH_CLIENT_SECRET"`.

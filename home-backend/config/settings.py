@@ -25,21 +25,6 @@ def env_list(name, default=""):
     return [item.strip() for item in raw_value.split(",") if item.strip()]
 
 
-def read_secret_file(path_value):
-    if not path_value:
-        return ""
-
-    secret_path = Path(path_value).expanduser()
-
-    if not secret_path.is_absolute():
-        secret_path = REPO_ROOT / secret_path
-
-    if not secret_path.is_file():
-        return ""
-
-    return secret_path.read_text(encoding="utf-8").strip()
-
-
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "unsafe-local-key-change-me")
 DEBUG = env_bool("DJANGO_DEBUG", False)
 ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1")
@@ -137,12 +122,7 @@ CSRF_COOKIE_SAMESITE = "Lax"
 # webhook verification and OAuth endpoints are added.
 GITHUB_WEBHOOK_SECRET = os.getenv("GITHUB_WEBHOOK_SECRET", "")
 GITHUB_OAUTH_CLIENT_ID = os.getenv("GITHUB_OAUTH_CLIENT_ID", "")
-GITHUB_OAUTH_SECRET_FILE = os.getenv(
-    "GITHUB_OAUTH_SECRET_FILE", "home-backend/github_oauth_client_secret.txt"
-)
-GITHUB_OAUTH_CLIENT_SECRET = os.getenv("GITHUB_OAUTH_CLIENT_SECRET", "") or read_secret_file(
-    GITHUB_OAUTH_SECRET_FILE
-)
+GITHUB_OAUTH_CLIENT_SECRET = os.getenv("GITHUB_OAUTH_CLIENT_SECRET", "").strip()
 GITHUB_OAUTH_REDIRECT_URI = os.getenv("GITHUB_OAUTH_REDIRECT_URI", "")
 GITHUB_OAUTH_SCOPES = env_list("GITHUB_OAUTH_SCOPES", "read:user,user:email")
 GITHUB_OAUTH_AUTHORIZE_URL = "https://github.com/login/oauth/authorize"
