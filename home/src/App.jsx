@@ -132,6 +132,218 @@ const proofPoints = [
   'High-trust interfaces that still feel premium and modern',
 ]
 
+const authErrorMessages = {
+  access_denied: 'GitHub sign-in was canceled before completion.',
+  exchange_failed: 'GitHub sign-in failed while the backend was exchanging credentials.',
+  missing_code: 'GitHub did not return an authorization code for this session.',
+  not_configured: 'GitHub auth is not configured on the backend yet.',
+  state_mismatch: 'GitHub sign-in could not be verified. Start a new login attempt.',
+}
+
+function buildAuthReturnPath() {
+  if (typeof window === 'undefined') {
+    return '/'
+  }
+
+  const url = new URL(window.location.href)
+  ;['auth', 'login', 'logout', 'error'].forEach((key) => url.searchParams.delete(key))
+
+  const query = url.searchParams.toString()
+  return `${url.pathname}${query ? `?${query}` : ''}${url.hash}` || '/'
+}
+
+function readAuthNotice() {
+  if (typeof window === 'undefined') {
+    return null
+  }
+
+  const url = new URL(window.location.href)
+
+  if (url.searchParams.get('auth') !== 'github') {
+    return null
+  }
+
+  const error = url.searchParams.get('error')
+  const login = url.searchParams.get('login')
+  const logout = url.searchParams.get('logout')
+
+  let notice = null
+
+  if (login === 'success') {
+    notice = {
+      tone: 'success',
+      title: 'GitHub connected',
+      body: 'This browser now has an active GitHub-backed session on the XMAXX home surface.',
+    }
+  } else if (logout === 'success') {
+    notice = {
+      tone: 'info',
+      title: 'Signed out',
+      body: 'The GitHub session for this browser has been cleared.',
+    }
+  } else if (error) {
+    notice = {
+      tone: 'error',
+      title: 'GitHub login failed',
+      body: authErrorMessages[error] ?? 'GitHub auth returned an unknown error.',
+    }
+  }
+
+  ;['auth', 'login', 'logout', 'error'].forEach((key) => url.searchParams.delete(key))
+  const query = url.searchParams.toString()
+  const nextUrl = `${url.pathname}${query ? `?${query}` : ''}${url.hash}`
+  window.history.replaceState({}, document.title, nextUrl || '/')
+
+  return notice
+}
+
+function AuthControls({ authState, onLogin, onLogout, stacked = false, onAction }) {
+  const className = `auth-actions${stacked ? ' auth-actions--stacked' : ''}`
+
+  const handleLogin = () => {
+    onAction?.()
+    onLogin()
+  }
+
+  const handleLogout = () => {
+    onAction?.()
+    onLogout()
+  }
+
+  if (authState.loading) {
+    return (
+      <div className={className}>
+        <div className="session-pill" aria-live="polite">
+          <span className="session-pill__status" />
+          <span>Checking GitHub access</span>
+        </div>
+      </div>
+    )
+  }
+
+  if (authState.authenticated && authState.user) {
+    const initial = authState.user.login?.slice(0, 1)?.toUpperCase() ?? 'G'
+
+    return (
+      <div className={className}>
+        <a
+          className="session-pill session-pill--link"
+          href={authState.user.profile_url || 'https://github.com'}
+          target="_blank"
+          rel="noreferrer"
+        >
+          {authState.user.avatar_url ? (
+            <img
+              className="session-pill__avatar"
+              src={authState.user.avatar_url}
+              alt={`${authState.user.login} avatar`}
+            />
+          ) : (
+            <span className="session-pill__avatar session-pill__avatar--fallback">
+              {initial}
+            </span>
+          )}
+          <span className="session-pill__copy">
+            <strong>{authState.user.name}</strong>
+            <small>@{authState.user.login}</small>
+          </span>
+        </a>
+
+        <motion.button
+          type="button"
+          className="button button--ghost button--small"
+          onClick={handleLogout}
+          whileTap={{ scale: 0.98 }}
+        >
+          Sign out
+        </motion.button>
+      </div>
+    )
+  }
+
+  return (
+    <div className={className}>
+      <motion.button
+        type="button"
+        className="button button--ghost button--small"
+        onClick={handleLogin}
+        disabled={!authState.configured || Boolean(authState.error)}
+        whileTap={{ scale: authState.configured && !authState.error ? 0.98 : 1 }}
+      >
+        {authState.configured && !authState.error
+          ? 'Login with GitHub'
+          : 'GitHub auth pending'}
+      </motion.button>
+    </div>
+  )
+}
+
+function AuthCard({ authState, notice, onLogin, onLogout }) {
+  const isAuthenticated = authState.authenticated && authState.user
+  const title = authState.loading
+    ? 'Checking GitHub access for this browser.'
+    : authState.error
+      ? 'The auth session endpoint is not responding yet.'
+      : isAuthenticated
+        ? `Welcome back, ${authState.user.name}.`
+        : authState.configured
+          ? 'Sign in with GitHub to unlock the private operator surface.'
+          : 'GitHub auth is staged but not configured yet.'
+
+  const body = authState.loading
+    ? 'The landing page is verifying whether a session already exists on the home backend.'
+    : authState.error
+      ? 'The frontend could not load session state from `/api/auth/session/`, so login actions stay disabled until the backend route is reachable.'
+      : isAuthenticated
+        ? 'This session is tied to the deployed Django backend, so private workflows can recognize the signed-in operator across the same `xmaxx.ai` origin.'
+        : authState.configured
+          ? 'The frontend now hands login to the Django backend, which completes the GitHub OAuth exchange and sets the session cookie on return.'
+          : 'Once the GitHub OAuth client settings are valid in the backend secret, this control will redirect through the deployed callback flow.'
+
+  const badgeClass = authState.loading
+    ? 'auth-badge auth-badge--muted'
+    : authState.error
+      ? 'auth-badge auth-badge--error'
+      : isAuthenticated
+        ? 'auth-badge auth-badge--live'
+        : authState.configured
+          ? 'auth-badge auth-badge--warm'
+          : 'auth-badge auth-badge--muted'
+
+  const badgeLabel = authState.loading
+    ? 'Checking'
+    : authState.error
+      ? 'Unavailable'
+      : isAuthenticated
+        ? 'Connected'
+        : authState.configured
+          ? 'Ready'
+          : 'Pending'
+
+  return (
+    <div className="auth-card surface">
+      <div className="auth-card__header">
+        <div>
+          <p className="eyebrow">Operator access</p>
+          <h3>{title}</h3>
+        </div>
+        <span className={badgeClass}>{badgeLabel}</span>
+      </div>
+
+      <p className="auth-card__body">{body}</p>
+
+      {notice ? (
+        <div className={`auth-notice auth-notice--${notice.tone}`} role="status">
+          <strong>{notice.title}</strong>
+          <span>{notice.body}</span>
+        </div>
+      ) : null}
+
+      <AuthControls authState={authState} onLogin={onLogin} onLogout={onLogout} />
+    </div>
+  )
+}
+
 function HeroPreview({ ready, onReady }) {
   const reduceMotion = useReducedMotion()
 
@@ -218,7 +430,23 @@ function App() {
   const [isBriefOpen, setIsBriefOpen] = useState(false)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [heroReady, setHeroReady] = useState(false)
+  const [authNotice, setAuthNotice] = useState(null)
+  const [authState, setAuthState] = useState({
+    loading: true,
+    authenticated: false,
+    configured: false,
+    user: null,
+    error: '',
+  })
   const menuId = useId()
+
+  useEffect(() => {
+    const notice = readAuthNotice()
+
+    if (notice) {
+      setAuthNotice(notice)
+    }
+  }, [])
 
   useEffect(() => {
     if (!isMenuOpen) {
@@ -241,11 +469,67 @@ function App() {
     }
   }, [isMenuOpen])
 
+  useEffect(() => {
+    const controller = new AbortController()
+
+    async function loadAuthSession() {
+      try {
+        const response = await fetch('/api/auth/session/', {
+          credentials: 'same-origin',
+          headers: { Accept: 'application/json' },
+          signal: controller.signal,
+        })
+
+        if (!response.ok) {
+          throw new Error(`Auth session request failed with status ${response.status}`)
+        }
+
+        const payload = await response.json()
+
+        setAuthState({
+          loading: false,
+          authenticated: Boolean(payload.authenticated),
+          configured: Boolean(payload.configured),
+          user: payload.user ?? null,
+          error: '',
+        })
+      } catch (error) {
+        if (controller.signal.aborted) {
+          return
+        }
+
+        setAuthState({
+          loading: false,
+          authenticated: false,
+          configured: false,
+          user: null,
+          error: error instanceof Error ? error.message : 'Unable to load auth session',
+        })
+      }
+    }
+
+    loadAuthSession()
+
+    return () => controller.abort()
+  }, [])
+
   const rankedCapabilities = [...capabilities].sort(
     (left, right) => right.scores[activeLens] - left.scores[activeLens],
   )
   const activeLensData =
     lenses.find((lens) => lens.id === activeLens) ?? lenses[0]
+
+  const handleGitHubLogin = () => {
+    window.location.assign(
+      `/api/auth/github/login/?next=${encodeURIComponent(buildAuthReturnPath())}`,
+    )
+  }
+
+  const handleGitHubLogout = () => {
+    window.location.assign(
+      `/api/auth/logout/?next=${encodeURIComponent(buildAuthReturnPath())}`,
+    )
+  }
 
   return (
     <>
@@ -272,6 +556,11 @@ function App() {
               activeValue={activeLens}
               onSelect={setActiveLens}
               options={lenses}
+            />
+            <AuthControls
+              authState={authState}
+              onLogin={handleGitHubLogin}
+              onLogout={handleGitHubLogout}
             />
             <InteractiveLink
               as={motion.button}
@@ -319,6 +608,13 @@ function App() {
                 Explore the focus deck
               </InteractiveLink>
             </div>
+
+            <AuthCard
+              authState={authState}
+              notice={authNotice}
+              onLogin={handleGitHubLogin}
+              onLogout={handleGitHubLogout}
+            />
 
             <ul className="proof-list" aria-label="XMAXX proof points">
               {proofPoints.map((item) => (
@@ -557,6 +853,17 @@ function App() {
                     </motion.button>
                   ))}
                 </div>
+              </div>
+
+              <div className="mobile-panel__auth">
+                <p className="eyebrow">GitHub access</p>
+                <AuthControls
+                  authState={authState}
+                  onLogin={handleGitHubLogin}
+                  onLogout={handleGitHubLogout}
+                  stacked
+                  onAction={() => setIsMenuOpen(false)}
+                />
               </div>
 
               <InteractiveLink

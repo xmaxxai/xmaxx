@@ -24,6 +24,15 @@ spec:
     - host: {{ . }}
       http:
         paths:
+          {{- if $.Values.apiBackend.enabled }}
+          - path: {{ $.Values.apiBackend.pathPrefix }}
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $.Values.apiBackend.serviceName }}
+                port:
+                  number: {{ $.Values.apiBackend.servicePort }}
+          {{- end }}
           - path: /
             pathType: Prefix
             backend:

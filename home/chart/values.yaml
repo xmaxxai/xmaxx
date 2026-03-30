@@ -10,6 +10,12 @@ image:
 service:
   port: 80
 
+apiBackend:
+  enabled: true
+  pathPrefix: /api
+  serviceName: home-backend
+  servicePort: 8000
+
 ingress:
   className: traefik
   hosts:

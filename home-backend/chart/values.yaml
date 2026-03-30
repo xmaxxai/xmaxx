@@ -17,10 +17,10 @@ env:
   postgresPort: "5432"
   postgresConnMaxAge: "60"
   djangoDebug: "false"
-  djangoAllowedHosts: "localhost,127.0.0.1,home-backend,home-backend.home.svc,home-backend.home.svc.cluster.local"
-  djangoCsrfTrustedOrigins: ""
+  djangoAllowedHosts: "localhost,127.0.0.1,xmaxx.ai,home-backend,home-backend.home.svc,home-backend.home.svc.cluster.local"
+  djangoCsrfTrustedOrigins: "https://xmaxx.ai"
   djangoTimeZone: UTC
-  githubOauthRedirectUri: ""
+  githubOauthRedirectUri: "https://xmaxx.ai/api/auth/github/callback/"
   githubOauthScopes: "read:user,user:email"
   githubOauthSecretFile: /var/run/secrets/github/oauth/client-secret
   runMigrationsOnStartup: "true"
