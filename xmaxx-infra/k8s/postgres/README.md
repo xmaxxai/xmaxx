@@ -12,6 +12,22 @@ Important repo context:
 - the live cluster reachable from `xmaxx-infra/kubeconfig.yaml` only has the `local-path` StorageClass today
 - because there is no `ebs.csi.aws.com` driver in that cluster yet, an actual EBS-backed PVC would stay `Pending` there
 
+## Current K3s Rollout
+
+For the current live K3s cluster, use the overlay in `overlays/k3s/` so the StatefulSet claims storage from `local-path` instead of `postgres-gp3`.
+
+Apply the Secret first, then the overlay:
+
+```bash
+set -a
+source .env
+set +a
+
+KUBECONFIG=xmaxx-infra/kubeconfig.yaml kubectl create namespace database --dry-run=client -o yaml | KUBECONFIG=xmaxx-infra/kubeconfig.yaml kubectl apply -f -
+envsubst < xmaxx-infra/k8s/postgres/02-secret.yaml | KUBECONFIG=xmaxx-infra/kubeconfig.yaml kubectl apply -f -
+KUBECONFIG=xmaxx-infra/kubeconfig.yaml kubectl apply -k xmaxx-infra/k8s/postgres/overlays/k3s
+```
+
 ## Apply
 
 Create the namespace:

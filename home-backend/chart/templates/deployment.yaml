@@ -1,0 +1,102 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "home-backend.fullname" . }}
+  namespace: {{ .Values.namespace }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ include "home-backend.name" . }}
+  template:
+    metadata:
+      labels:
+        app: {{ include "home-backend.name" . }}
+    spec:
+      containers:
+        - name: {{ include "home-backend.name" . }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8000
+          env:
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "home-backend.fullname" . }}
+                  key: POSTGRES_DB
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "home-backend.fullname" . }}
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "home-backend.fullname" . }}
+                  key: POSTGRES_PASSWORD
+            - name: DJANGO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "home-backend.fullname" . }}
+                  key: DJANGO_SECRET_KEY
+            - name: GITHUB_WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "home-backend.fullname" . }}
+                  key: GITHUB_WEBHOOK_SECRET
+            - name: GITHUB_OAUTH_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "home-backend.fullname" . }}
+                  key: GITHUB_OAUTH_CLIENT_ID
+            - name: POSTGRES_HOST
+              value: {{ .Values.env.postgresHost | quote }}
+            - name: POSTGRES_PORT
+              value: {{ .Values.env.postgresPort | quote }}
+            - name: POSTGRES_CONN_MAX_AGE
+              value: {{ .Values.env.postgresConnMaxAge | quote }}
+            - name: DJANGO_DEBUG
+              value: {{ .Values.env.djangoDebug | quote }}
+            - name: DJANGO_ALLOWED_HOSTS
+              value: {{ .Values.env.djangoAllowedHosts | quote }}
+            - name: DJANGO_CSRF_TRUSTED_ORIGINS
+              value: {{ .Values.env.djangoCsrfTrustedOrigins | quote }}
+            - name: DJANGO_TIME_ZONE
+              value: {{ .Values.env.djangoTimeZone | quote }}
+            - name: GITHUB_OAUTH_REDIRECT_URI
+              value: {{ .Values.env.githubOauthRedirectUri | quote }}
+            - name: GITHUB_OAUTH_SCOPES
+              value: {{ .Values.env.githubOauthScopes | quote }}
+            - name: GITHUB_OAUTH_SECRET_FILE
+              value: {{ .Values.env.githubOauthSecretFile | quote }}
+            - name: RUN_MIGRATIONS_ON_STARTUP
+              value: {{ .Values.env.runMigrationsOnStartup | quote }}
+            - name: DATABASE_STARTUP_MAX_ATTEMPTS
+              value: {{ .Values.env.databaseStartupMaxAttempts | quote }}
+            - name: DATABASE_STARTUP_DELAY_SECONDS
+              value: {{ .Values.env.databaseStartupDelaySeconds | quote }}
+          readinessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          volumeMounts:
+            - name: github-oauth-secret
+              mountPath: /var/run/secrets/github/oauth
+              readOnly: true
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: github-oauth-secret
+          secret:
+            secretName: {{ include "home-backend.fullname" . }}
+            items:
+              - key: GITHUB_OAUTH_CLIENT_SECRET
+                path: client-secret

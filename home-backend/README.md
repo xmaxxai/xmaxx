@@ -52,3 +52,16 @@ docker build -t home-backend:local ./home-backend
 ```
 
 The container entrypoint runs `python manage.py migrate --noinput` before starting Gunicorn so the Django schema is applied when the database becomes reachable.
+
+## Helm
+
+The backend chart lives in `home-backend/chart/`.
+
+The chart creates:
+
+- a Kubernetes `Secret` for runtime env values
+- a mounted secret file for `GITHUB_OAUTH_SECRET_FILE`
+- a `Deployment`
+- a `Service`
+
+For deploy time, pass the PEM file with `--set-file secrets.githubOauthClientSecret=home-backend/Github_oauth_Certificate.pem` so the secret file becomes a mounted volume in the pod.

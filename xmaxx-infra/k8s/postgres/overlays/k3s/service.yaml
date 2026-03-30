@@ -1,0 +1,19 @@
+# K3s overlay reuses the same internal Service shape as the EKS base.
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: database
+  labels:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/component: database
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: false
+  selector:
+    app.kubernetes.io/name: postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+      protocol: TCP

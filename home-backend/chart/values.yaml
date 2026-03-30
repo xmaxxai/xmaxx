@@ -1,0 +1,37 @@
+namespace: home
+
+replicaCount: 1
+
+image:
+  repository: athenalive/home
+  tag: backend-latest
+  pullPolicy: Always
+
+service:
+  port: 8000
+
+resources: {}
+
+env:
+  postgresHost: postgres.database.svc.cluster.local
+  postgresPort: "5432"
+  postgresConnMaxAge: "60"
+  djangoDebug: "false"
+  djangoAllowedHosts: "localhost,127.0.0.1,home-backend,home-backend.home.svc,home-backend.home.svc.cluster.local"
+  djangoCsrfTrustedOrigins: ""
+  djangoTimeZone: UTC
+  githubOauthRedirectUri: ""
+  githubOauthScopes: "read:user,user:email"
+  githubOauthSecretFile: /var/run/secrets/github/oauth/client-secret
+  runMigrationsOnStartup: "true"
+  databaseStartupMaxAttempts: "60"
+  databaseStartupDelaySeconds: "2"
+
+secrets:
+  postgresDb: ""
+  postgresUser: ""
+  postgresPassword: ""
+  djangoSecretKey: ""
+  githubWebhookSecret: ""
+  githubOauthClientId: ""
+  githubOauthClientSecret: ""
