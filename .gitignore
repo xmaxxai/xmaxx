@@ -41,6 +41,24 @@ terraform.tfvars.json
 **/dist/
 **/dist-ssr/
 
+# Python / Django artifacts
+**/__pycache__/
+*.py[cod]
+*.pyo
+.python-version
+.venv/
+venv/
+env/
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+*.sqlite3
+*.egg-info/
+**/staticfiles/
+
 # Local cert material and ACME storage
 vpn-certs/
 acme.json

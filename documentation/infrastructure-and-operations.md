@@ -23,6 +23,7 @@ Notable files:
 - `xmaxx-infra/main.tf`
 - `xmaxx-infra/imports.tf`
 - `xmaxx-infra/k8s/traefik/helmchartconfig.yaml`
+- `xmaxx-infra/k8s/postgres/`
 
 ### `xmaxx-infra-workers/`
 
@@ -57,6 +58,24 @@ Notable files:
 - `home/Dockerfile`
 - `home/nginx.conf`
 - `home/chart/`
+
+### `home-backend/`
+
+Owns the Django backend that will back the `home` application going forward.
+
+Key concerns:
+
+- Django application code
+- PostgreSQL connection settings
+- container image build path
+- health endpoint and future API expansion
+
+Notable files:
+
+- `home-backend/config/settings.py`
+- `home-backend/home_api/`
+- `home-backend/Dockerfile`
+- `home-backend/requirements.txt`
 
 ## Deployment Model
 
