@@ -9,3 +9,4 @@ venv/
 staticfiles/
 .env
 .env.*
+*.pem

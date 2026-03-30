@@ -26,8 +26,22 @@ The backend reads configuration from the repo-root `.env` file, including:
 - `DJANGO_DEBUG`
 - `DJANGO_ALLOWED_HOSTS`
 - `DJANGO_CSRF_TRUSTED_ORIGINS`
+- `GITHUB_WEBHOOK_SECRET`
+- `GITHUB_OAUTH_CLIENT_ID`
+- `GITHUB_OAUTH_CLIENT_SECRET`
+- `GITHUB_OAUTH_SECRET_FILE`
+- `GITHUB_OAUTH_REDIRECT_URI`
+- `GITHUB_OAUTH_SCOPES`
 
 By default, the backend expects the Kubernetes Postgres Service at `postgres.database.svc.cluster.local:5432`.
+
+For GitHub integration:
+
+- `GITHUB_WEBHOOK_SECRET` is a local signing secret used to verify webhook payloads
+- `GITHUB_OAUTH_CLIENT_ID` must come from a GitHub OAuth App
+- `GITHUB_OAUTH_CLIENT_SECRET` can stay empty if `GITHUB_OAUTH_SECRET_FILE` points at a local secret file
+- the default local secret-file path is `home-backend/Github_oauth_Certificate.pem`
+- `GITHUB_OAUTH_REDIRECT_URI` should match the callback URL configured in GitHub
 
 ## Docker
 
