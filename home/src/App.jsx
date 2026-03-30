@@ -1,139 +1,222 @@
-import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
-import { useEffect, useId, useRef, useState } from 'react'
+import { AnimatePresence, motion } from 'motion/react'
+import {
+  startTransition,
+  useDeferredValue,
+  useEffect,
+  useEffectEvent,
+  useId,
+  useRef,
+  useState,
+} from 'react'
 import heroImage from './assets/hero.png'
-import { BriefModal } from './components/BriefModal'
-import { ProfileWorkspace } from './components/ProfileWorkspace'
 import {
   InteractiveLink,
   InteractiveSurface,
   Reveal,
-  SkeletonBlock,
   StaggerGroup,
   StaggerItem,
 } from './components/motion-primitives'
 import './index.css'
 
 const navLinks = [
-  { label: 'Platform', href: '#platform' },
-  { label: 'Profile', href: '#profile' },
-  { label: 'Focus', href: '#focus' },
-  { label: 'Stack', href: '#stack' },
+  { id: 'overview', label: 'Overview' },
+  { id: 'feed', label: 'Feed' },
+  { id: 'board', label: 'Board' },
+  { id: 'stack', label: 'Stack' },
 ]
 
-const xmaxxGptUrl =
-  'https://chatgpt.com/g/g-69ca32256f08819189506732a7541301-xmaxx'
-
-const metrics = [
+const workspaceStats = [
   {
-    value: '24/7',
-    label: 'Operator-aware automation, not passive dashboards.',
+    value: 'Cmd + K',
+    label: 'Every core action routes through the command center.',
   },
   {
-    value: '<60s',
-    label: 'From signal to surfaced action across the runtime path.',
+    value: 'Live',
+    label: 'Agent rail stays pinned to the workspace and responds in place.',
   },
   {
-    value: '3X',
-    label: 'Software, AI, and hardware designed as one system.',
+    value: '0 hops',
+    label: 'Cards expand inline instead of kicking users into dead screens.',
   },
   {
-    value: 'TLS',
-    label: 'Production ingress, live cluster, and trusted HTTPS in motion.',
+    value: '240ms',
+    label: 'Motion stays sharp, short, and system-like rather than decorative.',
   },
 ]
 
-const lenses = [
+const streams = [
   {
-    id: 'operators',
-    label: 'Operators',
-    description: 'Pressure-tested control',
-    heading: 'Make the operating surface calm, legible, and fast under load.',
-    body: 'Operators need interfaces that stay clear when conditions change. XMAXX emphasizes observability, override paths, and actions that can be trusted under pressure.',
+    id: 'surface',
+    lane: 'Control surface',
+    title: 'Operator surface',
+    summary:
+      'Dense, command-first UI with state awareness, fast feedback, and no dead zones.',
+    status: 'Pinned',
+    metrics: ['Command center', 'Activity memory', 'Inline expansion'],
+    notes: [
+      'Selected state is visible without adding visual noise.',
+      'Every action responds immediately and logs itself into recent activity.',
+      'The shell behaves like a tool, not a brochure.',
+    ],
+    actionId: 'open-command',
+    actionLabel: 'Open command center',
   },
   {
-    id: 'partners',
-    label: 'Partners',
-    description: 'Signal with business clarity',
-    heading: 'Show external stakeholders a system that is credible, measurable, and integration-ready.',
-    body: 'Partners and vendors need disciplined visibility into what is deployed, what can be integrated, and how value will be measured over time.',
+    id: 'runtime',
+    lane: 'Runtime',
+    title: 'Runtime delivery',
+    summary:
+      'Ingress, TLS, Helm, and release posture stay on the main surface so infra feels productized.',
+    status: 'Hot path',
+    metrics: ['Helm', 'Ingress', 'TLS'],
+    notes: [
+      'Delivery state is visible next to the product surface.',
+      'Infrastructure language stays concise and operator-readable.',
+      'The board can be re-prioritized without leaving home.',
+    ],
+    actionId: 'focus-runtime',
+    actionLabel: 'Promote runtime',
   },
   {
-    id: 'builders',
-    label: 'Builders',
-    description: 'Ship the platform cleanly',
-    heading: 'Treat infrastructure, release flow, and UI polish as one engineering concern.',
-    body: 'Builders need a stack that can move from local iteration to cluster delivery without turning deployment, motion, and accessibility into separate projects.',
+    id: 'access',
+    lane: 'Access',
+    title: 'Operator identity',
+    summary:
+      'OAuth is treated as a live system capability, not a disconnected settings page.',
+    status: 'Armed',
+    metrics: ['GitHub', 'Google', 'Session'],
+    notes: [
+      'Provider readiness is visible before a user clicks sign-in.',
+      'Popup auth keeps the workspace intact while the backend handles the exchange.',
+      'The command layer can route straight into auth review.',
+    ],
+    actionId: 'auth-audit',
+    actionLabel: 'Audit access',
+  },
+  {
+    id: 'field',
+    lane: 'Signal plane',
+    title: 'Environmental intelligence',
+    summary:
+      'Water, air, and physical systems stay present in the feed so the interface feels grounded.',
+    status: 'Queued',
+    metrics: ['Water', 'Air', 'Hardware'],
+    notes: [
+      'The feed keeps physical-world work visible beside software work.',
+      'Signals can be elevated without rebuilding the layout.',
+      'This card is built to flex into richer system telemetry later.',
+    ],
+    actionId: 'run-sweep',
+    actionLabel: 'Run system sweep',
   },
 ]
 
-const capabilities = [
+const initialProcesses = [
   {
-    id: 'telemetry',
-    title: 'Field telemetry',
-    eyebrow: 'Signal plane',
-    body: 'Translate water, air, environment, and equipment behavior into inputs the system can actually reason about.',
-    scores: { operators: 95, partners: 72, builders: 82 },
+    id: 'agent',
+    label: 'Agent assist',
+    detail: 'Suggestions, inline commands, and live results.',
+    status: 'live',
   },
   {
-    id: 'control',
-    title: 'Operator control surfaces',
-    eyebrow: 'Human override',
-    body: 'Keep escalation, intervention, and auditability close to the interface rather than buried behind automation.',
-    scores: { operators: 97, partners: 70, builders: 86 },
+    id: 'runtime',
+    label: 'Runtime delivery',
+    detail: 'Release posture, ingress health, and deployment focus.',
+    status: 'stable',
   },
   {
-    id: 'delivery',
-    title: 'Infrastructure that ships like a product',
-    eyebrow: 'Platform delivery',
-    body: 'Terraform, Docker, K3s, and Helm are treated as part of the product system, not back-office chores.',
-    scores: { operators: 79, partners: 68, builders: 99 },
+    id: 'access',
+    label: 'Operator access',
+    detail: 'Popup OAuth, provider readiness, and session continuity.',
+    status: 'standby',
   },
   {
-    id: 'partner',
-    title: 'Partner-ready integration layers',
-    eyebrow: 'External collaboration',
-    body: 'Expose clean operational surfaces to vendors, partners, and future ecosystem collaborators without losing discipline.',
-    scores: { operators: 61, partners: 96, builders: 74 },
+    id: 'memory',
+    label: 'Activity memory',
+    detail: 'Recent actions stay visible so the interface never feels idle.',
+    status: 'running',
+  },
+]
+
+const initialActivity = [
+  {
+    id: 'activity-01',
+    lane: 'Workspace',
+    title: 'Home switched from landing page to operating layer.',
+    detail: 'The shell now centers live state, not marketing copy.',
+    time: 'Now',
+    tone: 'neutral',
   },
   {
-    id: 'presence',
-    title: 'Premium digital presence',
-    eyebrow: 'Public interface',
-    body: 'The public surface should look deliberate and perform with the same clarity as the systems behind it.',
-    scores: { operators: 57, partners: 88, builders: 75 },
+    id: 'activity-02',
+    lane: 'Agent',
+    title: 'Persistent right rail pinned and ready.',
+    detail: 'Suggestions can execute actions without leaving the page.',
+    time: '1m',
+    tone: 'accent',
   },
   {
-    id: 'hardware',
-    title: 'Software-to-hardware loop',
-    eyebrow: 'Physical systems',
-    body: 'Use AI and software to shape how hardware senses, reports, and responds instead of treating devices as isolated endpoints.',
-    scores: { operators: 91, partners: 84, builders: 89 },
+    id: 'activity-03',
+    lane: 'Speed',
+    title: 'Command center primed for keyboard-first control.',
+    detail: 'Cmd/Ctrl + K opens navigation, actions, and agent triggers.',
+    time: '3m',
+    tone: 'neutral',
+  },
+  {
+    id: 'activity-04',
+    lane: 'Access',
+    title: 'OAuth session watcher is live.',
+    detail: 'The surface refreshes auth state when a popup completes.',
+    time: '6m',
+    tone: 'muted',
+  },
+]
+
+const agentSuggestions = [
+  {
+    id: 'suggestion-sweep',
+    label: 'Run system sweep',
+    detail: 'Refresh priorities and promote the sharpest next action.',
+    actionId: 'run-sweep',
+  },
+  {
+    id: 'suggestion-runtime',
+    label: 'Promote runtime delivery',
+    detail: 'Shift the board toward release health and infra credibility.',
+    actionId: 'focus-runtime',
+  },
+  {
+    id: 'suggestion-auth',
+    label: 'Audit operator access',
+    detail: 'Check provider readiness and session posture.',
+    actionId: 'auth-audit',
+  },
+  {
+    id: 'suggestion-brief',
+    label: 'Draft build brief',
+    detail: 'Prepare the next conversation around what should be maxxed.',
+    actionId: 'compose-brief',
   },
 ]
 
 const stackLayers = [
   {
     title: 'Terraform',
-    body: 'AWS networking, instance provisioning, load balancers, and security groups are managed as code so the platform stays reproducible.',
+    body: 'Infrastructure stays reproducible so the product surface and runtime posture ship together.',
   },
   {
-    title: 'K3s Cluster',
-    body: 'The runtime is lightweight but real: ingress, workers, TLS automation, and app delivery run inside a live Kubernetes surface.',
+    title: 'K3s',
+    body: 'Lightweight Kubernetes keeps the runtime real without dragging the UI into infra bloat.',
   },
   {
     title: 'Docker',
-    body: 'The `home` app is built into a portable image so the frontend ships as a deployable artifact, not a manual file transfer.',
+    body: 'The frontend is packaged as a deployable artifact, not a one-off upload.',
   },
   {
     title: 'Helm',
-    body: 'Release behavior, service rules, and ingress settings are captured in the chart so the site can evolve without cluster drift.',
+    body: 'Release behavior lives next to the app so changes stay intentional and reviewable.',
   },
-]
-
-const proofPoints = [
-  'AI surfaces for water, air, and environmental systems',
-  'Operational control planes for teams under real constraints',
-  'High-trust interfaces that still feel premium and modern',
 ]
 
 const authProviders = [
@@ -283,7 +366,6 @@ function readAuthNotice() {
 
   const url = new URL(window.location.href)
   const provider = url.searchParams.get('auth')
-
   const error = url.searchParams.get('error')
   const login = url.searchParams.get('login')
   const logout = url.searchParams.get('logout')
@@ -398,34 +480,60 @@ function getUserSecondaryLabel(authState) {
   return providerLabel
 }
 
+function getProcessStatusLabel(status) {
+  switch (status) {
+    case 'live':
+      return 'Live'
+    case 'running':
+      return 'Running'
+    case 'stable':
+      return 'Stable'
+    case 'attention':
+      return 'Needs review'
+    case 'standby':
+      return 'Standby'
+    default:
+      return 'Queued'
+  }
+}
+
+function createActivityEntry({ lane, title, detail, tone = 'neutral' }) {
+  return {
+    id: `${lane}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    lane,
+    title,
+    detail,
+    time: 'Now',
+    tone,
+  }
+}
+
+function StatusPill({ status }) {
+  return (
+    <span className={`status-pill status-pill--${status}`}>
+      <span className="status-pill__dot" />
+      {getProcessStatusLabel(status)}
+    </span>
+  )
+}
+
 function AuthControls({
   authState,
   onOpenLogin,
   onLogout,
-  stacked = false,
-  onAction,
   busyProvider = '',
+  compact = false,
 }) {
-  const className = `auth-actions${stacked ? ' auth-actions--stacked' : ''}`
+  const className = `auth-actions${compact ? ' auth-actions--compact' : ''}`
   const availableProviders = getConfiguredProviders(authState)
   const secondaryLabel = getUserSecondaryLabel(authState)
-
-  const handleLogin = () => {
-    onAction?.()
-    onOpenLogin()
-  }
-
-  const handleLogout = () => {
-    onAction?.()
-    onLogout()
-  }
 
   if (authState.loading) {
     return (
       <div className={className}>
-        <div className="session-pill" aria-live="polite">
+        <div className="session-pill">
           <span className="session-pill__status" />
-          <span>Checking operator access</span>
+          <span>Checking access</span>
         </div>
       </div>
     )
@@ -436,7 +544,7 @@ function AuthControls({
       <div className={className}>
         <a
           className="session-pill session-pill--link"
-          href={authState.user.profile_url || '#top'}
+          href={authState.user.profile_url || '#overview'}
           target="_blank"
           rel="noreferrer"
         >
@@ -459,9 +567,9 @@ function AuthControls({
 
         <motion.button
           type="button"
-          className="button button--ghost button--small"
-          onClick={handleLogout}
-          whileTap={{ scale: 0.98 }}
+          className="ghost-button"
+          onClick={onLogout}
+          whileTap={{ scale: 0.985 }}
         >
           Sign out
         </motion.button>
@@ -473,14 +581,12 @@ function AuthControls({
     <div className={className}>
       <motion.button
         type="button"
-        className="button button--ghost button--small"
-        onClick={handleLogin}
+        className="ghost-button"
+        onClick={onOpenLogin}
         disabled={!authState.configured || Boolean(authState.error) || Boolean(busyProvider)}
         whileTap={{
           scale:
-            authState.configured && !authState.error && !busyProvider
-              ? 0.98
-              : 1,
+            authState.configured && !authState.error && !busyProvider ? 0.985 : 1,
         }}
       >
         {authState.error
@@ -495,73 +601,69 @@ function AuthControls({
   )
 }
 
-function AuthCard({ authState, notice, onOpenLogin, onLogout, busyProvider }) {
+function OperatorAccessCard({
+  authState,
+  notice,
+  onOpenLogin,
+  onLogout,
+  busyProvider,
+}) {
   const isAuthenticated = authState.authenticated && authState.user
   const configuredProviders = getConfiguredProviders(authState)
   const configuredProviderNames = configuredProviders.map(({ label }) => label).join(' or ')
   const title = authState.loading
-    ? 'Checking operator access for this browser.'
+    ? 'Checking operator access.'
     : authState.error
-      ? 'The auth session endpoint is not responding yet.'
+      ? 'Auth endpoint is not responding.'
       : isAuthenticated
-        ? `Welcome back, ${authState.user.name}.`
+        ? `Operator session live for ${authState.user.name}.`
         : authState.configured
           ? configuredProviders.length > 1
-            ? 'Choose Google or GitHub to unlock the private operator surface.'
-            : `Sign in with ${configuredProviderNames} to unlock the private operator surface.`
+            ? 'Choose Google or GitHub to unlock the private surface.'
+            : `Sign in with ${configuredProviderNames} to unlock the private surface.`
           : 'Operator auth is staged but not configured yet.'
 
   const body = authState.loading
-    ? 'The landing page is verifying whether a session already exists on the home backend.'
+    ? 'The workspace is checking whether a browser session already exists.'
     : authState.error
-      ? 'The frontend could not load session state from `/api/auth/session/`, so login actions stay disabled until the backend route is reachable.'
+      ? 'Login actions stay disabled until `/api/auth/session/` is reachable from the frontend.'
       : isAuthenticated
-        ? 'This session is tied to the deployed Django backend, so private workflows can recognize the signed-in operator across the same `xmaxx.ai` origin.'
+        ? 'The session is owned by the deployed backend, so private workflows can stay inside the same XMAXX surface.'
         : authState.configured
-          ? 'The auth surface opens a provider chooser in-place, then hands sign-in to a popup so the backend can finish the OAuth exchange without bouncing the landing page away from the user.'
-          : 'Once at least one provider has valid OAuth settings in the backend secret, this control will enable the deployed callback flow.'
+          ? 'Sign-in opens in a popup so the backend can complete the OAuth exchange without interrupting the workspace.'
+          : 'Once at least one provider has valid OAuth settings, this control will unlock the deployed callback flow.'
 
-  const badgeClass = authState.loading
-    ? 'auth-badge auth-badge--muted'
+  const status = authState.loading
+    ? 'running'
     : authState.error
-      ? 'auth-badge auth-badge--error'
+      ? 'attention'
       : isAuthenticated
-        ? 'auth-badge auth-badge--live'
+        ? 'live'
         : authState.configured
-          ? 'auth-badge auth-badge--warm'
-          : 'auth-badge auth-badge--muted'
-
-  const badgeLabel = authState.loading
-    ? 'Checking'
-    : authState.error
-      ? 'Unavailable'
-      : isAuthenticated
-        ? 'Connected'
-        : authState.configured
-          ? 'Ready'
-          : 'Pending'
+          ? 'stable'
+          : 'standby'
 
   return (
-    <div className="auth-card surface">
-      <div className="auth-card__header">
+    <section className="panel operator-card">
+      <div className="panel-heading">
         <div>
           <p className="eyebrow">Operator access</p>
           <h3>{title}</h3>
         </div>
-        <span className={badgeClass}>{badgeLabel}</span>
+        <StatusPill status={status} />
       </div>
 
-      <p className="auth-card__body">{body}</p>
+      <p className="operator-card__body">{body}</p>
 
-       <div className="auth-provider-strip" aria-label="Available sign-in providers">
+      <div className="provider-strip" aria-label="Available sign-in providers">
         {authProviders.map((provider) => {
           const providerState = getProviderState(authState, provider.id)
 
           return (
             <div
               key={provider.id}
-              className={`auth-provider-chip${
-                providerState.configured ? ' auth-provider-chip--live' : ''
+              className={`provider-chip${
+                providerState.configured ? ' provider-chip--ready' : ''
               }`}
             >
               <strong>{provider.label}</strong>
@@ -572,7 +674,7 @@ function AuthCard({ authState, notice, onOpenLogin, onLogout, busyProvider }) {
       </div>
 
       {notice ? (
-        <div className={`auth-notice auth-notice--${notice.tone}`} role="status">
+        <div className={`workspace-notice workspace-notice--${notice.tone}`} role="status">
           <strong>{notice.title}</strong>
           <span>{notice.body}</span>
         </div>
@@ -584,7 +686,7 @@ function AuthCard({ authState, notice, onOpenLogin, onLogout, busyProvider }) {
         onLogout={onLogout}
         busyProvider={busyProvider}
       />
-    </div>
+    </section>
   )
 }
 
@@ -595,7 +697,7 @@ function AuthModal({ open, onClose, authState, onSelectProvider, busyProvider = 
 
   return (
     <motion.div
-      className="overlay"
+      className="command-overlay"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -603,43 +705,39 @@ function AuthModal({ open, onClose, authState, onSelectProvider, busyProvider = 
       onClick={onClose}
     >
       <motion.div
-        className="auth-modal surface"
-        initial={{ opacity: 0, y: 16, scale: 0.98 }}
+        className="auth-dialog panel"
+        role="dialog"
+        aria-modal="true"
+        initial={{ opacity: 0, y: 18, scale: 0.985 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
-        exit={{ opacity: 0, y: 16, scale: 0.98 }}
+        exit={{ opacity: 0, y: 14, scale: 0.985 }}
         transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="auth-modal__header">
+        <div className="dialog-head">
           <div>
             <p className="eyebrow">Choose sign-in</p>
             <h2>Select the identity system that should own this browser session.</h2>
           </div>
-          <button
-            type="button"
-            className="icon-button"
-            onClick={onClose}
-            aria-label="Close sign-in options"
-          >
+          <button type="button" className="icon-button" onClick={onClose} aria-label="Close">
             ×
           </button>
         </div>
 
-        <p className="auth-modal__lede">
-          The backend completes the OAuth code exchange on `xmaxx.ai` and sets the
-          session cookie there. The popup closes automatically when the flow
-          finishes.
+        <p className="dialog-copy">
+          The backend completes the OAuth code exchange on the XMAXX origin and
+          keeps the workspace intact while the popup finishes.
         </p>
 
         {authState.error ? (
-          <div className="auth-notice auth-notice--error" role="status">
+          <div className="workspace-notice workspace-notice--error" role="status">
             <strong>Auth session unavailable</strong>
             <span>{authState.error}</span>
           </div>
         ) : null}
 
         {busyProvider ? (
-          <div className="auth-notice auth-notice--info" role="status">
+          <div className="workspace-notice workspace-notice--info" role="status">
             <strong>Complete {getProviderLabel(busyProvider)} sign-in</strong>
             <span>
               Finish the flow in the popup window. This page will refresh the
@@ -648,7 +746,7 @@ function AuthModal({ open, onClose, authState, onSelectProvider, busyProvider = 
           </div>
         ) : null}
 
-        <div className="auth-provider-grid">
+        <div className="provider-grid">
           {authProviders.map((provider) => {
             const providerState = getProviderState(authState, provider.id)
             const disabled =
@@ -660,30 +758,22 @@ function AuthModal({ open, onClose, authState, onSelectProvider, busyProvider = 
               <motion.button
                 key={provider.id}
                 type="button"
-                className={`auth-provider-option${
-                  providerState.configured ? ' auth-provider-option--ready' : ''
+                className={`provider-option${
+                  providerState.configured ? ' provider-option--ready' : ''
                 }`}
                 disabled={disabled}
                 onClick={() => onSelectProvider(provider.id)}
                 whileTap={{ scale: disabled ? 1 : 0.985 }}
               >
-                <div className="auth-provider-option__header">
+                <div className="provider-option__head">
                   <div>
-                    <p className="auth-provider-option__eyebrow">{provider.eyebrow}</p>
+                    <p className="provider-option__eyebrow">{provider.eyebrow}</p>
                     <h3>{provider.label}</h3>
                   </div>
-                  <span
-                    className={`auth-provider-option__status${
-                      providerState.configured
-                        ? ' auth-provider-option__status--ready'
-                        : ''
-                    }`}
-                  >
-                    {providerState.configured ? 'Ready' : 'Setup needed'}
-                  </span>
+                  <StatusPill status={providerState.configured ? 'stable' : 'attention'} />
                 </div>
                 <p>{provider.description}</p>
-                <span className="auth-provider-option__hint">
+                <span className="provider-option__hint">
                   {getProviderStatusCopy(provider.id, providerState.configuredReason)}
                 </span>
               </motion.button>
@@ -695,178 +785,233 @@ function AuthModal({ open, onClose, authState, onSelectProvider, busyProvider = 
   )
 }
 
-function HeroPreview({ ready, onReady }) {
-  const reduceMotion = useReducedMotion()
+function CommandCenter({
+  open,
+  onClose,
+  query,
+  onQueryChange,
+  commands,
+  selectedIndex,
+  onSelectIndex,
+  onRunCommand,
+}) {
+  const titleId = useId()
+  const inputRef = useRef(null)
+
+  useEffect(() => {
+    if (!open) {
+      return
+    }
+
+    const nextFrame = window.requestAnimationFrame(() => {
+      inputRef.current?.focus()
+    })
+
+    return () => window.cancelAnimationFrame(nextFrame)
+  }, [open])
+
+  if (!open) {
+    return null
+  }
+
+  const activeIndex = commands.length === 0 ? -1 : Math.min(selectedIndex, commands.length - 1)
 
   return (
-    <div className="hero-visual surface surface--dark">
-      <div className="hero-visual__header">
-        <span>Live surface</span>
-        <span>React • Motion • Helm</span>
-      </div>
-
-      <div className="hero-visual__media">
-        <AnimatePresence>
-          {!ready ? (
-            <motion.div
-              key="skeleton"
-              className="hero-visual__skeleton"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.22 }}
-            >
-              <SkeletonBlock className="hero-visual__skeleton-frame" />
-              <div className="hero-visual__skeleton-copy">
-                <SkeletonBlock className="hero-visual__skeleton-line hero-visual__skeleton-line--long" />
-                <SkeletonBlock className="hero-visual__skeleton-line" />
-                <SkeletonBlock className="hero-visual__skeleton-line hero-visual__skeleton-line--short" />
-              </div>
-            </motion.div>
-          ) : null}
-        </AnimatePresence>
-
-        <motion.img
-          className="hero-visual__image"
-          src={heroImage}
-          alt="Abstract XMAXX system composition showing layered environmental and digital structure."
-          initial={false}
-          animate={{ opacity: ready ? 1 : 0, scale: ready ? 1 : 1.03 }}
-          transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
-          onLoad={onReady}
-        />
-
-        <motion.div
-          className="hero-badge hero-badge--top"
-          animate={
-            reduceMotion ? undefined : { y: [0, -6, 0], rotate: [0, -1, 0] }
-          }
-          transition={
-            reduceMotion
-              ? undefined
-              : { duration: 5.6, repeat: Number.POSITIVE_INFINITY, ease: 'easeInOut' }
-          }
-        >
-          ACME-secured HTTPS
-        </motion.div>
-        <motion.div
-          className="hero-badge hero-badge--bottom"
-          animate={reduceMotion ? undefined : { y: [0, 8, 0] }}
-          transition={
-            reduceMotion
-              ? undefined
-              : { duration: 6.2, repeat: Number.POSITIVE_INFINITY, ease: 'easeInOut' }
-          }
-        >
-          Runtime-ready infrastructure
-        </motion.div>
-      </div>
-
-      <div className="hero-visual__footer">
-        <div>
-          <p className="hero-visual__label">Stack posture</p>
-          <strong>Production-minded from day one</strong>
+    <motion.div
+      className="command-overlay"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+      onClick={onClose}
+    >
+      <motion.div
+        className="command-center panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        initial={{ opacity: 0, y: 22, scale: 0.985 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 16, scale: 0.985 }}
+        transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="command-center__head">
+          <div>
+            <p className="eyebrow">Command center</p>
+            <h2 id={titleId}>Navigate, run actions, or trigger the agent without leaving home.</h2>
+          </div>
+          <div className="command-center__keys">
+            <kbd>↑</kbd>
+            <kbd>↓</kbd>
+            <kbd>Enter</kbd>
+          </div>
         </div>
-        <p>
-          The public surface is already backed by a live cluster, load-balanced
-          ingress, and persisted certificate automation.
-        </p>
-      </div>
-    </div>
+
+        <label className="command-search" htmlFor="command-search-input">
+          <span className="command-search__label">Query</span>
+          <input
+            ref={inputRef}
+            id="command-search-input"
+            type="text"
+            value={query}
+            onChange={(event) => onQueryChange(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'ArrowDown') {
+                event.preventDefault()
+                onSelectIndex(Math.min(activeIndex + 1, commands.length - 1))
+                return
+              }
+
+              if (event.key === 'ArrowUp') {
+                event.preventDefault()
+                onSelectIndex(Math.max(activeIndex - 1, 0))
+                return
+              }
+
+              if (event.key === 'Enter' && activeIndex >= 0) {
+                event.preventDefault()
+                onRunCommand(commands[activeIndex])
+              }
+            }}
+            placeholder="Search commands, surfaces, and agent actions"
+            autoComplete="off"
+          />
+        </label>
+
+        <div className="command-results">
+          {commands.length > 0 ? (
+            commands.map((command, index) => (
+              <motion.button
+                key={command.id}
+                type="button"
+                className={`command-row${index === activeIndex ? ' command-row--active' : ''}`}
+                onMouseEnter={() => onSelectIndex(index)}
+                onFocus={() => onSelectIndex(index)}
+                onClick={() => onRunCommand(command)}
+                whileTap={{ scale: 0.99 }}
+              >
+                <div className="command-row__copy">
+                  <strong>{command.label}</strong>
+                  <span>{command.detail}</span>
+                </div>
+                <small>{command.group}</small>
+              </motion.button>
+            ))
+          ) : (
+            <div className="command-empty">
+              <strong>No commands match that query.</strong>
+              <span>Try `agent`, `runtime`, `auth`, or `feed`.</span>
+            </div>
+          )}
+        </div>
+      </motion.div>
+    </motion.div>
   )
 }
 
 function App() {
-  const [activeLens, setActiveLens] = useState('operators')
-  const [isBriefOpen, setIsBriefOpen] = useState(false)
+  const [activeNav, setActiveNav] = useState('overview')
+  const [activeStreamId, setActiveStreamId] = useState('surface')
+  const [expandedStreamId, setExpandedStreamId] = useState('surface')
+  const [workspaceNote, setWorkspaceNote] = useState(
+    'Ship the operating layer before polishing the story. Speed is the story.',
+  )
+  const [noteState, setNoteState] = useState('synced')
+  const [activity, setActivity] = useState(initialActivity)
+  const [processes, setProcesses] = useState(initialProcesses)
+  const [selectedSuggestionId, setSelectedSuggestionId] = useState('suggestion-sweep')
+  const [agentMode, setAgentMode] = useState('Watching the surface for the next move.')
+  const [agentResult, setAgentResult] = useState('No active run. Suggestions are ready.')
+  const [isCommandOpen, setIsCommandOpen] = useState(false)
+  const [commandQuery, setCommandQuery] = useState('')
+  const [commandIndex, setCommandIndex] = useState(0)
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false)
-  const [isMenuOpen, setIsMenuOpen] = useState(false)
-  const [heroReady, setHeroReady] = useState(false)
   const [authNotice, setAuthNotice] = useState(() => readAuthNotice())
   const [authState, setAuthState] = useState(buildInitialAuthState)
   const [authBusyProvider, setAuthBusyProvider] = useState('')
-  const menuId = useId()
+  const [accessProcessOverride, setAccessProcessOverride] = useState(null)
   const authPopupMonitorRef = useRef(0)
+  const timersRef = useRef(new Set())
+  const noteSyncTimerRef = useRef(0)
+  const deferredCommandQuery = useDeferredValue(commandQuery)
+  const activeStream = streams.find((stream) => stream.id === activeStreamId) ?? streams[0]
 
-  useEffect(() => {
-    if (!isMenuOpen) {
-      return undefined
+  const queueTimeout = (callback, delay = 960) => {
+    const timerId = window.setTimeout(() => {
+      timersRef.current.delete(timerId)
+      callback()
+    }, delay)
+
+    timersRef.current.add(timerId)
+  }
+
+  const pushActivity = (entry) => {
+    setActivity((current) => [createActivityEntry(entry), ...current].slice(0, 7))
+  }
+
+  const updateProcess = (processId, status, detail) => {
+    if (processId === 'access') {
+      setAccessProcessOverride({
+        status,
+        detail,
+      })
+      return
     }
 
-    const handleKeyDown = (event) => {
-      if (event.key === 'Escape') {
-        setIsMenuOpen(false)
-      }
-    }
+    setProcesses((current) =>
+      current.map((process) =>
+        process.id === processId
+          ? {
+              ...process,
+              status,
+              detail: detail ?? process.detail,
+            }
+          : process,
+      ),
+    )
+  }
 
-    const previousOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    window.addEventListener('keydown', handleKeyDown)
+  const focusSection = (sectionId) => {
+    setActiveNav(sectionId)
+    document.getElementById(sectionId)?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start',
+    })
+  }
 
-    return () => {
-      document.body.style.overflow = previousOverflow
-      window.removeEventListener('keydown', handleKeyDown)
-    }
-  }, [isMenuOpen])
+  const selectStream = (streamId, forceExpand = false) => {
+    startTransition(() => {
+      setActiveStreamId(streamId)
+      setExpandedStreamId((current) => {
+        if (forceExpand) {
+          return streamId
+        }
 
-  useEffect(() => {
-    const controller = new AbortController()
+        return current === streamId ? '' : streamId
+      })
+    })
+  }
 
-    void syncAuthSession(setAuthState, controller.signal)
+  const openCommandCenter = () => {
+    setIsCommandOpen(true)
+    setCommandQuery('')
+    setCommandIndex(0)
+  }
 
-    return () => controller.abort()
-  }, [])
-
-  useEffect(() => {
-    const handleMessage = (event) => {
-      if (event.origin !== window.location.origin) {
-        return
-      }
-
-      if (event.data?.source !== 'xmaxx-oauth') {
-        return
-      }
-
-      if (authPopupMonitorRef.current) {
-        window.clearInterval(authPopupMonitorRef.current)
-        authPopupMonitorRef.current = 0
-      }
-
-      setAuthBusyProvider('')
-      setIsAuthModalOpen(false)
-
-      const notice = buildAuthNotice(event.data)
-
-      if (notice) {
-        setAuthNotice(notice)
-      }
-
-      void syncAuthSession(setAuthState)
-    }
-
-    window.addEventListener('message', handleMessage)
-
-    return () => {
-      window.removeEventListener('message', handleMessage)
-    }
-  }, [])
-
-  useEffect(() => {
-    return () => {
-      if (authPopupMonitorRef.current) {
-        window.clearInterval(authPopupMonitorRef.current)
-      }
-    }
-  }, [])
-
-  const rankedCapabilities = [...capabilities].sort(
-    (left, right) => right.scores[activeLens] - left.scores[activeLens],
-  )
-  const activeLensData =
-    lenses.find((lens) => lens.id === activeLens) ?? lenses[0]
+  const handleCommandQueryChange = (value) => {
+    setCommandQuery(value)
+    setCommandIndex(0)
+  }
 
   const handleOpenLogin = () => {
     setIsAuthModalOpen(true)
+    pushActivity({
+      lane: 'Access',
+      title: 'Operator sign-in surfaced from the workspace.',
+      detail: 'The auth selector opened without forcing a page transition.',
+      tone: 'accent',
+    })
   }
 
   const handleProviderLogin = (provider) => {
@@ -892,6 +1037,13 @@ function App() {
       body: 'Finish sign-in in the popup window. This page will refresh the session when the provider returns.',
     })
     setIsAuthModalOpen(false)
+    updateProcess('access', 'running', `Waiting for ${getProviderLabel(provider)} to return.`)
+    pushActivity({
+      lane: 'Access',
+      title: `${getProviderLabel(provider)} sign-in launched.`,
+      detail: 'The popup flow is now owning the auth exchange.',
+      tone: 'accent',
+    })
 
     authPopupMonitorRef.current = window.setInterval(() => {
       if (!popup.closed) {
@@ -901,6 +1053,7 @@ function App() {
       window.clearInterval(authPopupMonitorRef.current)
       authPopupMonitorRef.current = 0
       setAuthBusyProvider('')
+      setAccessProcessOverride(null)
       void syncAuthSession(setAuthState)
     }, 500)
   }
@@ -911,356 +1064,772 @@ function App() {
     )
   }
 
+  const runWorkspaceAction = (actionId) => {
+    switch (actionId) {
+      case 'open-command':
+        openCommandCenter()
+        pushActivity({
+          lane: 'Speed',
+          title: 'Command center opened.',
+          detail: 'Keyboard-first control stays one shortcut away.',
+          tone: 'accent',
+        })
+        break
+      case 'focus-runtime':
+        selectStream('runtime', true)
+        focusSection('board')
+        setSelectedSuggestionId('suggestion-runtime')
+        setAgentMode('Runtime delivery promoted to the front of the board.')
+        setAgentResult('Release posture is now the active focus.')
+        updateProcess('runtime', 'running', 'Reordering the board around delivery posture.')
+        updateProcess('agent', 'running', 'Promoting runtime delivery across the workspace.')
+        pushActivity({
+          lane: 'Runtime',
+          title: 'Runtime delivery moved to the hot path.',
+          detail: 'The control board now prioritizes release and infra credibility.',
+          tone: 'accent',
+        })
+        queueTimeout(() => {
+          updateProcess('runtime', 'live', 'Runtime posture is now the active surface.')
+          updateProcess('agent', 'live', 'Agent rail synchronized with runtime focus.')
+          setAgentResult('Runtime delivery is now leading the workspace.')
+        })
+        break
+      case 'run-sweep':
+        setSelectedSuggestionId('suggestion-sweep')
+        setAgentMode('Sweeping streams and refreshing what should be maxxed next.')
+        setAgentResult('Running a cross-surface priority sweep.')
+        updateProcess('agent', 'running', 'Re-scoring active streams and quick actions.')
+        updateProcess('memory', 'running', 'Writing fresh activity into the live feed.')
+        pushActivity({
+          lane: 'Agent',
+          title: 'System sweep started.',
+          detail: 'The agent rail is refreshing priorities and recent activity.',
+          tone: 'accent',
+        })
+        queueTimeout(() => {
+          selectStream('surface', true)
+          updateProcess('agent', 'live', 'Sweep completed and recommendations updated.')
+          updateProcess('memory', 'live', 'Activity feed refreshed with current posture.')
+          setAgentMode('Sweep complete. Operator surface is still the strongest lead.')
+          setAgentResult('The control surface remains first. Runtime stays close behind.')
+          pushActivity({
+            lane: 'Agent',
+            title: 'System sweep completed.',
+            detail: 'Operator surface remains the sharpest priority on home.',
+            tone: 'neutral',
+          })
+        }, 1040)
+        break
+      case 'auth-audit':
+        selectStream('access', true)
+        focusSection('board')
+        setSelectedSuggestionId('suggestion-auth')
+        setAgentMode('Auditing provider readiness and browser session posture.')
+        setAgentResult('Operator access audit is in progress.')
+        updateProcess('access', 'running', 'Reviewing provider readiness and session state.')
+        updateProcess('agent', 'running', 'Scanning auth posture from the side rail.')
+        pushActivity({
+          lane: 'Access',
+          title: 'Operator access audit started.',
+          detail: 'Provider readiness and current browser session are being reviewed.',
+          tone: 'accent',
+        })
+        queueTimeout(() => {
+          setAccessProcessOverride(null)
+          updateProcess('agent', 'live', 'Access posture folded back into the rail.')
+          setAgentResult(
+            authState.authenticated
+              ? 'Session is live and attached to the private surface.'
+              : authState.error
+                ? 'Auth endpoint still needs attention.'
+                : authState.configured
+                  ? 'Providers are ready. The workspace can hand off to sign-in.'
+                  : 'Auth is staged but not yet configured.',
+          )
+        }, 880)
+        break
+      case 'compose-brief':
+        setSelectedSuggestionId('suggestion-brief')
+        setAgentMode('Drafting the next build conversation around real system pressure.')
+        setAgentResult('The agent framed the next brief around speed, control, and trust.')
+        updateProcess('agent', 'running', 'Composing the next operator brief.')
+        pushActivity({
+          lane: 'Brief',
+          title: 'Build brief drafted from the current workspace state.',
+          detail: 'The next conversation is centered on the active surface, runtime, and access posture.',
+          tone: 'neutral',
+        })
+        queueTimeout(() => {
+          updateProcess('agent', 'live', 'Draft brief ready for operator review.')
+          window.location.assign('mailto:info@xmaxx.ai?subject=XMAXX%20Build%20Brief')
+        }, 520)
+        break
+      default:
+        break
+    }
+  }
+
+  const commandEntries = [
+    {
+      id: 'cmd-overview',
+      group: 'Navigate',
+      label: 'Jump to overview',
+      detail: 'See the launchpad, live stats, and immediate actions.',
+      keywords: 'overview launchpad home top',
+      commandType: 'section',
+      target: 'overview',
+    },
+    {
+      id: 'cmd-feed',
+      group: 'Navigate',
+      label: 'Jump to feed',
+      detail: 'Open the expandable stream cards and live priorities.',
+      keywords: 'feed streams cards priorities',
+      commandType: 'section',
+      target: 'feed',
+    },
+    {
+      id: 'cmd-board',
+      group: 'Navigate',
+      label: 'Jump to board',
+      detail: 'Move to process state, operator note, and active controls.',
+      keywords: 'board processes note controls',
+      commandType: 'section',
+      target: 'board',
+    },
+    {
+      id: 'cmd-stack',
+      group: 'Navigate',
+      label: 'Jump to stack',
+      detail: 'Review the delivery layers behind the surface.',
+      keywords: 'stack terraform k3s docker helm',
+      commandType: 'section',
+      target: 'stack',
+    },
+    {
+      id: 'cmd-open-command',
+      group: 'Run',
+      label: 'Open command center',
+      detail: 'Keep the keyboard-first control loop active.',
+      keywords: 'command center keyboard',
+      commandType: 'action',
+      target: 'open-command',
+    },
+    {
+      id: 'cmd-sweep',
+      group: 'Agent',
+      label: 'Run system sweep',
+      detail: 'Refresh the active streams and recent activity.',
+      keywords: 'agent sweep refresh',
+      commandType: 'action',
+      target: 'run-sweep',
+    },
+    {
+      id: 'cmd-runtime',
+      group: 'Agent',
+      label: 'Promote runtime delivery',
+      detail: 'Move infra and release posture to the front of the board.',
+      keywords: 'runtime delivery infra release',
+      commandType: 'action',
+      target: 'focus-runtime',
+    },
+    {
+      id: 'cmd-auth',
+      group: 'Access',
+      label: 'Audit operator access',
+      detail: 'Review provider readiness and session state.',
+      keywords: 'auth access oauth session',
+      commandType: 'action',
+      target: 'auth-audit',
+    },
+    {
+      id: 'cmd-brief',
+      group: 'Agent',
+      label: 'Draft build brief',
+      detail: 'Open the next conversation from current workspace state.',
+      keywords: 'brief build conversation mail',
+      commandType: 'action',
+      target: 'compose-brief',
+    },
+    {
+      id: 'cmd-login',
+      group: 'Access',
+      label: authState.authenticated ? 'Review active session' : 'Open sign-in',
+      detail: authState.authenticated
+        ? 'Inspect the session card and private access posture.'
+        : 'Open provider selection without leaving the workspace.',
+      keywords: 'login auth session provider',
+      commandType: authState.authenticated ? 'section' : 'login',
+      target: authState.authenticated ? 'board' : 'login',
+    },
+  ]
+
+  const normalizedQuery = deferredCommandQuery.trim().toLowerCase()
+  const filteredCommands = commandEntries.filter((command) => {
+    if (!normalizedQuery) {
+      return true
+    }
+
+    const haystack = `${command.group} ${command.label} ${command.detail} ${command.keywords}`.toLowerCase()
+    return haystack.includes(normalizedQuery)
+  })
+
+  useEffect(() => {
+    const controller = new AbortController()
+
+    void syncAuthSession(setAuthState, controller.signal)
+
+    return () => controller.abort()
+  }, [])
+
+  useEffect(() => {
+    const timers = timersRef.current
+
+    return () => {
+      if (authPopupMonitorRef.current) {
+        window.clearInterval(authPopupMonitorRef.current)
+      }
+
+      if (noteSyncTimerRef.current) {
+        window.clearTimeout(noteSyncTimerRef.current)
+      }
+
+      timers.forEach((timerId) => window.clearTimeout(timerId))
+      timers.clear()
+    }
+  }, [])
+
+  const handleAuthMessage = useEffectEvent((event) => {
+    if (event.origin !== window.location.origin) {
+      return
+    }
+
+    if (event.data?.source !== 'xmaxx-oauth') {
+      return
+    }
+
+    if (authPopupMonitorRef.current) {
+      window.clearInterval(authPopupMonitorRef.current)
+      authPopupMonitorRef.current = 0
+    }
+
+    setAuthBusyProvider('')
+    setIsAuthModalOpen(false)
+    setAccessProcessOverride(null)
+
+    const notice = buildAuthNotice(event.data)
+    if (notice) {
+      setAuthNotice(notice)
+    }
+
+    pushActivity({
+      lane: 'Access',
+      title: `${getProviderLabel(event.data.provider)} auth returned to the workspace.`,
+      detail: 'Session state is being refreshed in place.',
+      tone: 'accent',
+    })
+    void syncAuthSession(setAuthState)
+  })
+
+  useEffect(() => {
+    window.addEventListener('message', handleAuthMessage)
+
+    return () => {
+      window.removeEventListener('message', handleAuthMessage)
+    }
+  }, [])
+
+  const handleGlobalKeyDown = useEffectEvent((event) => {
+    const isShortcut = (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k'
+
+    if (isShortcut) {
+      event.preventDefault()
+      openCommandCenter()
+      return
+    }
+
+    if (event.key === 'Escape') {
+      setIsCommandOpen(false)
+      setIsAuthModalOpen(false)
+    }
+  })
+
+  useEffect(() => {
+    window.addEventListener('keydown', handleGlobalKeyDown)
+
+    return () => {
+      window.removeEventListener('keydown', handleGlobalKeyDown)
+    }
+  }, [])
+
+  const runCommand = (command) => {
+    setIsCommandOpen(false)
+    setCommandQuery('')
+
+    if (command.commandType === 'section') {
+      focusSection(command.target)
+      return
+    }
+
+    if (command.commandType === 'login') {
+      handleOpenLogin()
+      return
+    }
+
+    runWorkspaceAction(command.target)
+  }
+
+  const derivedAccessProcess = accessProcessOverride ?? {
+    status: authState.loading
+      ? 'running'
+      : authState.authenticated
+        ? 'live'
+        : authState.error || !authState.configured
+          ? 'attention'
+          : 'stable',
+    detail: authState.loading
+      ? 'Checking session continuity on the current browser.'
+      : authState.authenticated
+        ? 'Live operator session detected.'
+        : authState.error
+          ? authState.error
+          : authState.configured
+            ? 'Providers are ready for sign-in.'
+            : 'Auth still needs backend configuration.',
+  }
+
+  const renderedProcesses = processes.map((process) =>
+    process.id === 'access'
+      ? {
+          ...process,
+          ...derivedAccessProcess,
+        }
+      : process,
+  )
+
   return (
     <>
-      <main className="app-shell">
-        <div className="ambient ambient--one" />
-        <div className="ambient ambient--two" />
+      <main className="workspace-shell">
+        <div className="workspace-ambient workspace-ambient--one" />
+        <div className="workspace-ambient workspace-ambient--two" />
 
-        <header className="topbar surface">
-          <a className="brand" href="#top">
+        <motion.header
+          className="workspace-topbar panel"
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+        >
+          <a className="brand" href="#overview">
             <span>XMAXX</span>
-            <small>software • hardware • AI</small>
+            <small>speed is the product</small>
           </a>
 
-          <div className="topbar__dock">
-            <nav className="topnav" aria-label="Primary">
-              {navLinks.map((link) => (
-                <InteractiveLink key={link.href} className="topnav__link" href={link.href}>
-                  {link.label}
-                </InteractiveLink>
-              ))}
-            </nav>
+          <nav className="workspace-nav" aria-label="Primary">
+            {navLinks.map((link) => (
+              <InteractiveLink
+                key={link.id}
+                className={`workspace-nav__link${
+                  activeNav === link.id ? ' workspace-nav__link--active' : ''
+                }`}
+                href={`#${link.id}`}
+                onClick={() => setActiveNav(link.id)}
+              >
+                {link.label}
+              </InteractiveLink>
+            ))}
+          </nav>
 
-            <div className="topbar__auth">
-              <AuthControls
-                authState={authState}
-                onOpenLogin={handleOpenLogin}
-                onLogout={handleLogout}
-                busyProvider={authBusyProvider}
-              />
+          <div className="workspace-topbar__actions">
+            <motion.button
+              type="button"
+              className="command-trigger"
+              onClick={() => runWorkspaceAction('open-command')}
+              whileTap={{ scale: 0.985 }}
+            >
+              <span>Command center</span>
+              <kbd>Cmd K</kbd>
+            </motion.button>
+
+            <AuthControls
+              authState={authState}
+              onOpenLogin={handleOpenLogin}
+              onLogout={handleLogout}
+              busyProvider={authBusyProvider}
+              compact
+            />
+          </div>
+        </motion.header>
+
+        <Reveal as={motion.section} className="overview-grid" id="overview">
+          <div className="panel launchpad launchpad--active">
+            <div className="panel-heading panel-heading--tight">
+              <div>
+                <p className="eyebrow">Operating layer</p>
+                <h1>
+                  Linear speed with an AI brain, Vercel restraint, Notion
+                  flexibility, and Stripe-grade finish.
+                </h1>
+              </div>
+              <StatusPill status="live" />
+            </div>
+
+            <p className="launchpad__lede">
+              Home is now a live workspace. It keeps actions close, surfaces state
+              continuously, and lets the user operate the system instead of
+              browsing a dashboard.
+            </p>
+
+            <div className="launchpad__actions">
+              <motion.button
+                type="button"
+                className="primary-button"
+                onClick={() => runWorkspaceAction('run-sweep')}
+                whileTap={{ scale: 0.985 }}
+              >
+                Run system sweep
+              </motion.button>
+              <motion.button
+                type="button"
+                className="ghost-button"
+                onClick={() => runWorkspaceAction('auth-audit')}
+                whileTap={{ scale: 0.985 }}
+              >
+                Audit access
+              </motion.button>
+              <motion.button
+                type="button"
+                className="ghost-button"
+                onClick={() => runWorkspaceAction('focus-runtime')}
+                whileTap={{ scale: 0.985 }}
+              >
+                Promote runtime
+              </motion.button>
+            </div>
+
+            <div className="stats-grid">
+              {workspaceStats.map((stat) => (
+                <div key={stat.label} className="stat-card">
+                  <strong>{stat.value}</strong>
+                  <span>{stat.label}</span>
+                </div>
+              ))}
             </div>
           </div>
 
-          <InteractiveLink
-            as={motion.button}
-            type="button"
-            className="menu-toggle"
-            aria-controls={menuId}
-            aria-expanded={isMenuOpen}
-            onClick={() => setIsMenuOpen(true)}
-          >
-            Menu
-          </InteractiveLink>
-        </header>
+          <div className="panel signal-card">
+            <div className="signal-card__overlay">
+              <div className="panel-heading panel-heading--tight">
+                <div>
+                  <p className="eyebrow">System map</p>
+                  <h2>Feed, board, rail, and runtime now read as one surface.</h2>
+                </div>
+                <span className="mini-label">Live topology</span>
+              </div>
 
-        <Reveal as={motion.section} className="hero section surface" id="top">
-          <div className="hero-copy">
-            <p className="eyebrow">XMAXX / live systems</p>
-            <h1>We maxx the systems that shape how people live.</h1>
-            <p className="hero-copy__lede">
-              From water and air to infrastructure, interfaces, and physical
-              environments, XMAXX builds AI-enabled software and hardware
-              systems designed to see more, decide faster, and improve what is
-              underperforming.
-            </p>
+              <div className="signal-card__strips" aria-hidden="true">
+                <span />
+                <span />
+                <span />
+              </div>
 
-            <div className="hero-copy__actions">
-              <InteractiveLink
-                as={motion.button}
-                type="button"
-                className="button button--solid"
-                onClick={() => setIsBriefOpen(true)}
-              >
-                Book a build conversation
-              </InteractiveLink>
-              <InteractiveLink
-                className="button button--ghost"
-                href={xmaxxGptUrl}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Open the XMAXX GPT
-              </InteractiveLink>
-              <InteractiveLink className="button button--ghost" href="#focus">
-                Explore the focus deck
-              </InteractiveLink>
+              <p className="signal-card__body">
+                The visual system stays cold and minimal, but the interface never
+                feels inert. Motion is short, state is obvious, and every panel is
+                built to expand rather than redirect.
+              </p>
             </div>
 
-            <AuthCard
+            <img
+              className="signal-card__image"
+              src={heroImage}
+              alt="Abstract system topology"
+            />
+          </div>
+        </Reveal>
+
+        <div className="workspace-grid">
+          <div className="workspace-main">
+            <Reveal as={motion.section} className="panel feed-panel" id="feed" delay={0.05}>
+              <div className="panel-heading">
+                <div>
+                  <p className="eyebrow">What’s being maxxed</p>
+                  <h2>Cards expand inline so the feed behaves like a workspace.</h2>
+                </div>
+                <span className="mini-label">{activeStream.title} selected</span>
+              </div>
+
+              <StaggerGroup as={motion.div} className="stream-grid" staggerChildren={0.06}>
+                {streams.map((stream) => {
+                  const expanded = expandedStreamId === stream.id
+                  const active = activeStreamId === stream.id
+
+                  return (
+                    <StaggerItem key={stream.id}>
+                      <InteractiveSurface
+                        as={motion.article}
+                        layout
+                        className={`stream-card${expanded ? ' stream-card--expanded' : ''}${
+                          active ? ' stream-card--active' : ''
+                        }`}
+                        onClick={() => selectStream(stream.id)}
+                      >
+                        <div className="stream-card__head">
+                          <div>
+                            <p className="stream-card__lane">{stream.lane}</p>
+                            <h3>{stream.title}</h3>
+                          </div>
+                          <span className="stream-card__status">{stream.status}</span>
+                        </div>
+
+                        <p className="stream-card__summary">{stream.summary}</p>
+
+                        <div className="stream-card__metrics">
+                          {stream.metrics.map((metric) => (
+                            <span key={metric}>{metric}</span>
+                          ))}
+                        </div>
+
+                        <AnimatePresence initial={false}>
+                          {expanded ? (
+                            <motion.div
+                              className="stream-card__details"
+                              initial={{ opacity: 0, height: 0 }}
+                              animate={{ opacity: 1, height: 'auto' }}
+                              exit={{ opacity: 0, height: 0 }}
+                              transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+                            >
+                              <ul className="stream-card__notes">
+                                {stream.notes.map((note) => (
+                                  <li key={note}>{note}</li>
+                                ))}
+                              </ul>
+
+                              <div className="stream-card__actions">
+                                <motion.button
+                                  type="button"
+                                  className="ghost-button"
+                                  onClick={(event) => {
+                                    event.stopPropagation()
+                                    setActiveStreamId(stream.id)
+                                  }}
+                                  whileTap={{ scale: 0.985 }}
+                                >
+                                  Keep selected
+                                </motion.button>
+                                <motion.button
+                                  type="button"
+                                  className="primary-button primary-button--small"
+                                  onClick={(event) => {
+                                    event.stopPropagation()
+                                    runWorkspaceAction(stream.actionId)
+                                  }}
+                                  whileTap={{ scale: 0.985 }}
+                                >
+                                  {stream.actionLabel}
+                                </motion.button>
+                              </div>
+                            </motion.div>
+                          ) : null}
+                        </AnimatePresence>
+                      </InteractiveSurface>
+                    </StaggerItem>
+                  )
+                })}
+              </StaggerGroup>
+            </Reveal>
+
+            <div className="workspace-row">
+              <Reveal as={motion.section} className="panel board-panel" id="board" delay={0.08}>
+                <div className="panel-heading">
+                  <div>
+                    <p className="eyebrow">State board</p>
+                    <h2>No dead UI. Every lane shows whether it is active, stable, or needs attention.</h2>
+                  </div>
+                  <span className="mini-label">Selected: {activeStream.lane}</span>
+                </div>
+
+                <div className="process-list">
+                  {renderedProcesses.map((process) => (
+                    <div key={process.id} className="process-row">
+                      <div className="process-row__copy">
+                        <strong>{process.label}</strong>
+                        <span>{process.detail}</span>
+                      </div>
+                      <StatusPill status={process.status} />
+                    </div>
+                  ))}
+                </div>
+              </Reveal>
+
+              <Reveal as={motion.section} className="panel note-panel" delay={0.11}>
+                <div className="panel-heading">
+                  <div>
+                    <p className="eyebrow">Operator note</p>
+                    <h2>Inline editing keeps the surface feeling owned, not fixed.</h2>
+                  </div>
+                  <span className="mini-label">{noteState === 'saving' ? 'Saving...' : 'Synced'}</span>
+                </div>
+
+                <label className="note-editor">
+                  <span>Working hypothesis</span>
+                  <textarea
+                    value={workspaceNote}
+                    onChange={(event) => {
+                      setWorkspaceNote(event.target.value)
+                      setNoteState('saving')
+                      if (noteSyncTimerRef.current) {
+                        window.clearTimeout(noteSyncTimerRef.current)
+                      }
+                      noteSyncTimerRef.current = window.setTimeout(() => {
+                        noteSyncTimerRef.current = 0
+                        setNoteState('synced')
+                      }, 320)
+                    }}
+                  />
+                </label>
+
+                <div className="note-panel__actions">
+                  <motion.button
+                    type="button"
+                    className="ghost-button"
+                    onClick={() => focusSection('feed')}
+                    whileTap={{ scale: 0.985 }}
+                  >
+                    Return to feed
+                  </motion.button>
+                  <motion.button
+                    type="button"
+                    className="primary-button primary-button--small"
+                    onClick={() => runWorkspaceAction('compose-brief')}
+                    whileTap={{ scale: 0.985 }}
+                  >
+                    Draft build brief
+                  </motion.button>
+                </div>
+              </Reveal>
+            </div>
+
+            <div className="workspace-row">
+              <Reveal as={motion.section} className="panel activity-panel" delay={0.14}>
+                <div className="panel-heading">
+                  <div>
+                    <p className="eyebrow">Recent activity</p>
+                    <h2>Feed and dashboard blend together so momentum stays visible.</h2>
+                  </div>
+                  <span className="mini-label">Recent first</span>
+                </div>
+
+                <div className="activity-list">
+                  {activity.map((item) => (
+                    <div key={item.id} className={`activity-item activity-item--${item.tone}`}>
+                      <div className="activity-item__meta">
+                        <span>{item.lane}</span>
+                        <small>{item.time}</small>
+                      </div>
+                      <strong>{item.title}</strong>
+                      <p>{item.detail}</p>
+                    </div>
+                  ))}
+                </div>
+              </Reveal>
+
+              <Reveal as={motion.section} className="panel stack-panel" id="stack" delay={0.17}>
+                <div className="panel-heading">
+                  <div>
+                    <p className="eyebrow">Platform stack</p>
+                    <h2>The UI only feels expensive if the delivery path feels disciplined.</h2>
+                  </div>
+                  <span className="mini-label">Runtime-backed</span>
+                </div>
+
+                <div className="stack-list">
+                  {stackLayers.map((layer) => (
+                    <div key={layer.title} className="stack-item">
+                      <strong>{layer.title}</strong>
+                      <p>{layer.body}</p>
+                    </div>
+                  ))}
+                </div>
+              </Reveal>
+            </div>
+          </div>
+
+          <Reveal as={motion.aside} className="panel agent-rail" delay={0.07}>
+            <div className="panel-heading">
+              <div>
+                <p className="eyebrow">Agent rail</p>
+                <h2>AI sits beside the operator, not behind a hidden modal.</h2>
+              </div>
+              <StatusPill status="live" />
+            </div>
+
+            <div className="agent-rail__hero">
+              <strong>{agentMode}</strong>
+              <p>{agentResult}</p>
+            </div>
+
+            <div className="agent-rail__section">
+              <p className="agent-rail__label">Suggested actions</p>
+              <div className="suggestion-list">
+                {agentSuggestions.map((suggestion) => (
+                  <motion.button
+                    key={suggestion.id}
+                    type="button"
+                    className={`suggestion-card${
+                      selectedSuggestionId === suggestion.id ? ' suggestion-card--active' : ''
+                    }`}
+                    onClick={() => {
+                      setSelectedSuggestionId(suggestion.id)
+                      runWorkspaceAction(suggestion.actionId)
+                    }}
+                    whileTap={{ scale: 0.985 }}
+                  >
+                    <strong>{suggestion.label}</strong>
+                    <span>{suggestion.detail}</span>
+                  </motion.button>
+                ))}
+              </div>
+            </div>
+
+            <div className="agent-rail__section">
+              <p className="agent-rail__label">Live results</p>
+              <div className="console-list">
+                {activity.slice(0, 3).map((item) => (
+                  <div key={item.id} className="console-line">
+                    <span className="console-line__pulse" />
+                    <div>
+                      <strong>{item.lane}</strong>
+                      <p>{item.title}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <OperatorAccessCard
               authState={authState}
               notice={authNotice}
               onOpenLogin={handleOpenLogin}
               onLogout={handleLogout}
               busyProvider={authBusyProvider}
             />
-
-            <ul className="proof-list" aria-label="XMAXX proof points">
-              {proofPoints.map((item) => (
-                <motion.li
-                  key={item}
-                  className="proof-list__item"
-                  initial={{ opacity: 0, x: -14 }}
-                  whileInView={{ opacity: 1, x: 0 }}
-                  viewport={{ once: true, amount: 0.6 }}
-                  transition={{ duration: 0.48 }}
-                >
-                  <span className="proof-list__dot" />
-                  {item}
-                </motion.li>
-              ))}
-            </ul>
-          </div>
-
-          <HeroPreview ready={heroReady} onReady={() => setHeroReady(true)} />
-        </Reveal>
-
-        <StaggerGroup as={motion.section} className="metric-strip" id="platform">
-          {metrics.map((item) => (
-            <StaggerItem key={item.label}>
-              <InteractiveSurface className="metric-card" lift={5}>
-                <p className="metric-card__value">{item.value}</p>
-                <p className="metric-card__label">{item.label}</p>
-              </InteractiveSurface>
-            </StaggerItem>
-          ))}
-        </StaggerGroup>
-
-        <ProfileWorkspace authState={authState} onOpenLogin={handleOpenLogin} />
-
-        <Reveal as={motion.section} className="focus section" id="focus">
-          <div className="section-copy">
-            <p className="eyebrow">Audience focus</p>
-            <h2>One system, different priorities depending on who is in the room.</h2>
-            <p>
-              The same platform should read differently to operators, partners,
-              and builders. Change the lens and the capability deck reorders
-              around what matters most.
-            </p>
-          </div>
-
-          <div className="lens-bar">
-            <div className="lens-tabs" role="tablist" aria-label="Audience lenses">
-              {lenses.map((lens) => (
-                <motion.button
-                  key={lens.id}
-                  type="button"
-                  className={`lens-tab${lens.id === activeLens ? ' lens-tab--active' : ''}`}
-                  onClick={() => setActiveLens(lens.id)}
-                  role="tab"
-                  aria-selected={lens.id === activeLens}
-                  layout
-                >
-                  {lens.id === activeLens ? (
-                    <motion.span
-                      className="lens-tab__pill"
-                      layoutId="active-lens"
-                      transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
-                    />
-                  ) : null}
-                  <span className="lens-tab__label">{lens.label}</span>
-                </motion.button>
-              ))}
-            </div>
-
-            <p className="lens-bar__note">
-              Layout shifts are intentional here: the deck re-prioritizes as the
-              audience changes.
-            </p>
-          </div>
-
-          <motion.div layout className="lens-summary surface">
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={activeLens}
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.24 }}
-              >
-                <p className="eyebrow">{activeLensData.description}</p>
-                <h3>{activeLensData.heading}</h3>
-                <p>{activeLensData.body}</p>
-              </motion.div>
-            </AnimatePresence>
-          </motion.div>
-
-          <motion.div layout className="capability-grid">
-            {rankedCapabilities.map((item, index) => (
-              <InteractiveSurface
-                as={motion.article}
-                layout
-                key={item.id}
-                className={`capability-card${
-                  index < 2 ? ' capability-card--featured' : ''
-                }`}
-                lift={6}
-              >
-                <div className="capability-card__head">
-                  <p className="capability-card__eyebrow">{item.eyebrow}</p>
-                  <span className="capability-card__score">
-                    {item.scores[activeLens]}
-                  </span>
-                </div>
-                <h3>{item.title}</h3>
-                <p>{item.body}</p>
-                <div className="capability-card__meter" aria-hidden="true">
-                  <motion.span
-                    className="capability-card__meter-fill"
-                    initial={false}
-                    animate={{ width: `${item.scores[activeLens]}%` }}
-                    transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-                  />
-                </div>
-              </InteractiveSurface>
-            ))}
-          </motion.div>
-        </Reveal>
-
-        <StaggerGroup as={motion.section} className="stack section" id="stack">
-          <div className="section-copy section-copy--tight">
-            <p className="eyebrow">Platform stack</p>
-            <h2>Built to look premium and deploy like software.</h2>
-            <p>
-              The UI is only credible if the delivery path is credible. The
-              current platform already connects infrastructure-as-code,
-              containerized delivery, cluster runtime, and ingress automation.
-            </p>
-          </div>
-
-          <div className="stack-grid">
-            {stackLayers.map((layer) => (
-              <StaggerItem key={layer.title}>
-                <InteractiveSurface className="stack-card" lift={5}>
-                  <p className="stack-card__title">{layer.title}</p>
-                  <p>{layer.body}</p>
-                </InteractiveSurface>
-              </StaggerItem>
-            ))}
-          </div>
-        </StaggerGroup>
-
-        <Reveal as={motion.section} className="closing-banner surface surface--dark">
-          <div className="closing-banner__copy">
-            <p className="eyebrow">MAXXER posture</p>
-            <h2>Build the software. Build the hardware. Maxx the system end to end.</h2>
-            <p>
-              XMAXX is aiming at systems that can be measured, improved, and
-              continuously refined with AI. The website is the first public
-              surface, not the endpoint.
-            </p>
-          </div>
-
-          <div className="closing-banner__actions">
-            <InteractiveLink
-              as={motion.button}
-              type="button"
-              className="button button--solid button--contrast"
-              onClick={() => setIsBriefOpen(true)}
-            >
-              Start the conversation
-            </InteractiveLink>
-            <InteractiveLink className="button button--ghost button--contrast" href="mailto:info@xmaxx.ai">
-              info@xmaxx.ai
-            </InteractiveLink>
-          </div>
-        </Reveal>
+          </Reveal>
+        </div>
       </main>
 
       <AnimatePresence>
-        {isMenuOpen ? (
-          <motion.div
-            className="overlay"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            onClick={() => setIsMenuOpen(false)}
-          >
-            <motion.aside
-              id={menuId}
-              className="mobile-panel surface"
-              initial={{ x: '100%', opacity: 0.96 }}
-              animate={{ x: 0, opacity: 1 }}
-              exit={{ x: '100%', opacity: 0.96 }}
-              transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-              onClick={(event) => event.stopPropagation()}
-            >
-              <div className="mobile-panel__header">
-                <div>
-                  <p className="eyebrow">Navigate</p>
-                  <h2>Move through the surface cleanly.</h2>
-                </div>
-                <button
-                  type="button"
-                  className="icon-button"
-                  onClick={() => setIsMenuOpen(false)}
-                  aria-label="Close menu"
-                >
-                  ×
-                </button>
-              </div>
-
-              <div className="mobile-panel__links">
-                {navLinks.map((link) => (
-                  <InteractiveLink
-                    key={link.href}
-                    className="mobile-link"
-                    href={link.href}
-                    onClick={() => setIsMenuOpen(false)}
-                  >
-                    {link.label}
-                  </InteractiveLink>
-                ))}
-              </div>
-
-              <div className="mobile-panel__lenses">
-                <p className="eyebrow">Audience lens</p>
-                <div className="mobile-panel__chips">
-                  {lenses.map((lens) => (
-                    <motion.button
-                      key={lens.id}
-                      type="button"
-                      className={`mobile-chip${
-                        activeLens === lens.id ? ' mobile-chip--active' : ''
-                      }`}
-                      onClick={() => {
-                        setActiveLens(lens.id)
-                        setIsMenuOpen(false)
-                      }}
-                      whileTap={{ scale: 0.98 }}
-                    >
-                      {lens.label}
-                    </motion.button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="mobile-panel__auth">
-                <p className="eyebrow">Operator access</p>
-                <AuthControls
-                  authState={authState}
-                  onOpenLogin={handleOpenLogin}
-                  onLogout={handleLogout}
-                  stacked
-                  busyProvider={authBusyProvider}
-                  onAction={() => setIsMenuOpen(false)}
-                />
-              </div>
-
-              <InteractiveLink
-                as={motion.button}
-                type="button"
-                className="button button--solid"
-                onClick={() => {
-                  setIsMenuOpen(false)
-                  setIsBriefOpen(true)
-                }}
-              >
-                Request operator brief
-              </InteractiveLink>
-            </motion.aside>
-          </motion.div>
+        {isCommandOpen ? (
+          <CommandCenter
+            open={isCommandOpen}
+            onClose={() => setIsCommandOpen(false)}
+            query={commandQuery}
+            onQueryChange={handleCommandQueryChange}
+            commands={filteredCommands}
+            selectedIndex={commandIndex}
+            onSelectIndex={setCommandIndex}
+            onRunCommand={runCommand}
+          />
         ) : null}
       </AnimatePresence>
 
@@ -1275,8 +1844,6 @@ function App() {
           />
         ) : null}
       </AnimatePresence>
-
-      <BriefModal open={isBriefOpen} onClose={() => setIsBriefOpen(false)} />
     </>
   )
 }

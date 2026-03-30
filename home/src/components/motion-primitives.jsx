@@ -1,7 +1,7 @@
 import { motion, useReducedMotion } from 'motion/react'
 
 const ease = [0.22, 1, 0.36, 1]
-const viewport = { once: true, amount: 0.24 }
+const viewport = { once: true, amount: 0.18 }
 
 export function Reveal({
   as: Component = motion.div,
@@ -15,10 +15,10 @@ export function Reveal({
   return (
     <Component
       className={className}
-      initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 28 }}
+      initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 18 }}
       whileInView={reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
       viewport={viewport}
-      transition={{ duration: 0.72, delay, ease }}
+      transition={{ duration: 0.32, delay, ease }}
       {...props}
     >
       {children}
@@ -30,8 +30,8 @@ export function StaggerGroup({
   as: Component = motion.div,
   children,
   className,
-  delayChildren = 0.06,
-  staggerChildren = 0.08,
+  delayChildren = 0.04,
+  staggerChildren = 0.06,
   ...props
 }) {
   const reduceMotion = useReducedMotion()
@@ -74,11 +74,11 @@ export function StaggerItem({
         reduceMotion
           ? undefined
           : {
-              hidden: { opacity: 0, y: 18 },
+              hidden: { opacity: 0, y: 12 },
               visible: {
                 opacity: 1,
                 y: 0,
-                transition: { duration: 0.54, ease },
+                transition: { duration: 0.28, ease },
               },
             }
       }
@@ -100,7 +100,7 @@ export function InteractiveLink({
   return (
     <Component
       className={className}
-      whileHover={reduceMotion ? undefined : { y: -2, scale: 1.01 }}
+      whileHover={reduceMotion ? undefined : { y: -1, scale: 1.02 }}
       whileTap={reduceMotion ? undefined : { scale: 0.985 }}
       transition={{ duration: 0.18, ease }}
       {...props}
@@ -114,7 +114,7 @@ export function InteractiveSurface({
   as: Component = motion.article,
   children,
   className,
-  lift = 8,
+  lift = 4,
   ...props
 }) {
   const reduceMotion = useReducedMotion()
@@ -122,9 +122,9 @@ export function InteractiveSurface({
   return (
     <Component
       className={className}
-      whileHover={reduceMotion ? undefined : { y: -lift }}
+      whileHover={reduceMotion ? undefined : { y: -lift, scale: 1.02 }}
       whileTap={reduceMotion ? undefined : { scale: 0.992 }}
-      transition={{ duration: 0.22, ease }}
+      transition={{ duration: 0.2, ease }}
       {...props}
     >
       {children}
@@ -138,11 +138,11 @@ export function SkeletonBlock({ className, ...props }) {
   return (
     <motion.div
       className={`skeleton${className ? ` ${className}` : ''}`}
-      animate={reduceMotion ? { opacity: 0.78 } : { opacity: [0.46, 0.92, 0.46] }}
+      animate={reduceMotion ? { opacity: 0.78 } : { opacity: [0.44, 0.92, 0.44] }}
       transition={
         reduceMotion
           ? { duration: 0 }
-          : { duration: 1.8, repeat: Number.POSITIVE_INFINITY, ease: 'easeInOut' }
+          : { duration: 1.4, repeat: Number.POSITIVE_INFINITY, ease: 'easeInOut' }
       }
       {...props}
     />
