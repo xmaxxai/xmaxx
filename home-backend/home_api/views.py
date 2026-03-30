@@ -1,4 +1,5 @@
 import json
+import logging
 import secrets
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -8,6 +9,8 @@ from django.conf import settings
 from django.db import connection
 from django.http import JsonResponse
 from django.shortcuts import redirect
+
+logger = logging.getLogger(__name__)
 
 
 def _safe_next_path(next_path):
@@ -63,12 +66,17 @@ def _github_request(url, *, method="GET", token="", payload=None):
 
 
 def _oauth_not_configured():
-    return not all(
+    secret = (settings.GITHUB_OAUTH_CLIENT_SECRET or "").strip()
+
+    return (
+        not all(
         [
             settings.GITHUB_OAUTH_CLIENT_ID,
-            settings.GITHUB_OAUTH_CLIENT_SECRET,
             settings.GITHUB_OAUTH_REDIRECT_URI,
+            secret,
         ]
+        )
+        or secret.startswith("-----BEGIN")
     )
 
 
@@ -212,7 +220,8 @@ def github_callback(request):
         request.session["github_user"] = _github_user_from_api(access_token)
         request.session["github_authenticated"] = True
         request.session.modified = True
-    except RuntimeError:
+    except RuntimeError as exc:
+        logger.warning("GitHub token exchange failed: %s", exc)
         return redirect(_append_query(next_path, {"auth": "github", "error": "exchange_failed"}))
 
     return redirect(_append_query(next_path, {"auth": "github", "login": "success"}))
