@@ -1,0 +1,15 @@
+# macOS / Finder
+.DS_Store
+
+# Xcode user-specific state
+*.xcuserstate
+*.xcscmblueprint
+*.xccheckout
+xcuserdata/
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+
+# SwiftPM / local build outputs
+.build/
+DerivedData/
+build/
