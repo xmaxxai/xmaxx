@@ -135,7 +135,14 @@ const proofPoints = [
 const authErrorMessages = {
   access_denied: 'GitHub sign-in was canceled before completion.',
   exchange_failed: 'GitHub sign-in failed while the backend was exchanging credentials.',
+  invalid_secret_format:
+    'The mounted GitHub secret file is not a valid OAuth client secret string.',
   missing_code: 'GitHub did not return an authorization code for this session.',
+  missing_client_id: 'The backend is missing the GitHub OAuth client ID.',
+  missing_client_secret:
+    'The backend is missing the GitHub OAuth client secret for the GitHub app.',
+  missing_redirect_uri:
+    'The backend is missing the GitHub OAuth redirect URI configuration.',
   not_configured: 'GitHub auth is not configured on the backend yet.',
   state_mismatch: 'GitHub sign-in could not be verified. Start a new login attempt.',
 }
@@ -272,7 +279,9 @@ function AuthControls({ authState, onLogin, onLogout, stacked = false, onAction 
       >
         {authState.configured && !authState.error
           ? 'Login with GitHub'
-          : 'GitHub auth pending'}
+          : authState.configuredReason === 'invalid_secret_format'
+            ? 'GitHub secret invalid'
+            : 'GitHub auth not configured'}
       </motion.button>
     </div>
   )
@@ -288,7 +297,9 @@ function AuthCard({ authState, notice, onLogin, onLogout }) {
         ? `Welcome back, ${authState.user.name}.`
         : authState.configured
           ? 'Sign in with GitHub to unlock the private operator surface.'
-          : 'GitHub auth is staged but not configured yet.'
+          : authState.configuredReason === 'invalid_secret_format'
+            ? 'The mounted GitHub secret file is not a valid OAuth client secret.'
+            : 'GitHub auth is staged but not configured yet.'
 
   const body = authState.loading
     ? 'The landing page is verifying whether a session already exists on the home backend.'
@@ -298,7 +309,9 @@ function AuthCard({ authState, notice, onLogin, onLogout }) {
         ? 'This session is tied to the deployed Django backend, so private workflows can recognize the signed-in operator across the same `xmaxx.ai` origin.'
         : authState.configured
           ? 'The frontend now hands login to the Django backend, which completes the GitHub OAuth exchange and sets the session cookie on return.'
-          : 'Once the GitHub OAuth client settings are valid in the backend secret, this control will redirect through the deployed callback flow.'
+          : authState.configuredReason === 'invalid_secret_format'
+            ? 'The secret volume is mounted, but the file contents look like a PEM certificate instead of the raw GitHub client secret string.'
+            : 'Once the GitHub OAuth client settings are valid in the backend secret, this control will redirect through the deployed callback flow.'
 
   const badgeClass = authState.loading
     ? 'auth-badge auth-badge--muted'
@@ -435,6 +448,7 @@ function App() {
     loading: true,
     authenticated: false,
     configured: false,
+    configuredReason: '',
     user: null,
     error: '',
   })
@@ -490,6 +504,7 @@ function App() {
           loading: false,
           authenticated: Boolean(payload.authenticated),
           configured: Boolean(payload.configured),
+          configuredReason: payload.configuredReason ?? '',
           user: payload.user ?? null,
           error: '',
         })
@@ -502,6 +517,7 @@ function App() {
           loading: false,
           authenticated: false,
           configured: false,
+          configuredReason: '',
           user: null,
           error: error instanceof Error ? error.message : 'Unable to load auth session',
         })

@@ -65,19 +65,26 @@ def _github_request(url, *, method="GET", token="", payload=None):
         raise RuntimeError(str(exc)) from exc
 
 
-def _oauth_not_configured():
+def _oauth_config_reason():
     secret = (settings.GITHUB_OAUTH_CLIENT_SECRET or "").strip()
 
-    return (
-        not all(
-        [
-            settings.GITHUB_OAUTH_CLIENT_ID,
-            settings.GITHUB_OAUTH_REDIRECT_URI,
-            secret,
-        ]
-        )
-        or secret.startswith("-----BEGIN")
-    )
+    if not settings.GITHUB_OAUTH_CLIENT_ID:
+        return "missing_client_id"
+
+    if not settings.GITHUB_OAUTH_REDIRECT_URI:
+        return "missing_redirect_uri"
+
+    if not secret:
+        return "missing_client_secret"
+
+    if secret.startswith("-----BEGIN"):
+        return "invalid_secret_format"
+
+    return ""
+
+
+def _oauth_not_configured():
+    return bool(_oauth_config_reason())
 
 
 def _github_user_from_api(token):
@@ -144,11 +151,13 @@ def health(request):
 
 def auth_session(request):
     github_user = request.session.get("github_user")
+    configured_reason = _oauth_config_reason()
 
     return _json_no_store(
         {
             "authenticated": bool(github_user),
-            "configured": not _oauth_not_configured(),
+            "configured": not configured_reason,
+            "configuredReason": configured_reason,
             "user": github_user,
         }
     )
@@ -156,9 +165,15 @@ def auth_session(request):
 
 def github_login(request):
     next_path = _safe_next_path(request.GET.get("next", "/"))
+    configured_reason = _oauth_config_reason()
 
-    if _oauth_not_configured():
-        return redirect(_append_query(next_path, {"auth": "github", "error": "not_configured"}))
+    if configured_reason:
+        return redirect(
+            _append_query(
+                next_path,
+                {"auth": "github", "error": configured_reason},
+            )
+        )
 
     state = secrets.token_urlsafe(32)
     request.session["github_oauth_state"] = state
@@ -180,6 +195,7 @@ def github_login(request):
 def github_callback(request):
     next_path = _safe_next_path(request.session.pop("github_oauth_next", "/"))
     expected_state = request.session.pop("github_oauth_state", "")
+    configured_reason = _oauth_config_reason()
 
     if request.GET.get("error"):
         return redirect(
@@ -192,8 +208,13 @@ def github_callback(request):
     if request.GET.get("state") != expected_state or not expected_state:
         return redirect(_append_query(next_path, {"auth": "github", "error": "state_mismatch"}))
 
-    if _oauth_not_configured():
-        return redirect(_append_query(next_path, {"auth": "github", "error": "not_configured"}))
+    if configured_reason:
+        return redirect(
+            _append_query(
+                next_path,
+                {"auth": "github", "error": configured_reason},
+            )
+        )
 
     code = request.GET.get("code")
 
