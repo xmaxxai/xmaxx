@@ -138,7 +138,7 @@ CSRF_COOKIE_SAMESITE = "Lax"
 GITHUB_WEBHOOK_SECRET = os.getenv("GITHUB_WEBHOOK_SECRET", "")
 GITHUB_OAUTH_CLIENT_ID = os.getenv("GITHUB_OAUTH_CLIENT_ID", "")
 GITHUB_OAUTH_SECRET_FILE = os.getenv(
-    "GITHUB_OAUTH_SECRET_FILE", "home-backend/Github_oauth_Certificate.pem"
+    "GITHUB_OAUTH_SECRET_FILE", "home-backend/github_oauth_client_secret.txt"
 )
 GITHUB_OAUTH_CLIENT_SECRET = os.getenv("GITHUB_OAUTH_CLIENT_SECRET", "") or read_secret_file(
     GITHUB_OAUTH_SECRET_FILE

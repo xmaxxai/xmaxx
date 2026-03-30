@@ -10,3 +10,4 @@ staticfiles/
 .env
 .env.*
 *.pem
+github_oauth_client_secret.txt

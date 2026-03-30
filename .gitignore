@@ -11,6 +11,7 @@
 *.pfx
 *.ovpn
 *.mobileconfig
+home-backend/github_oauth_client_secret.txt
 *kubeconfig*
 **/kubeconfig.yaml
 

@@ -42,7 +42,7 @@ For GitHub integration:
 - `GITHUB_OAUTH_CLIENT_SECRET` can stay empty if `GITHUB_OAUTH_SECRET_FILE` points at a local secret file
 - `GITHUB_OAUTH_SECRET_FILE` must point at a file that contains only the raw GitHub client secret string
 - a certificate or PEM file is not a valid OAuth client secret and will leave GitHub auth in `not_configured`
-- the historical local filename `home-backend/Github_oauth_Certificate.pem` is only acceptable if its contents are actually the client secret string
+- the recommended local filename is `home-backend/github_oauth_client_secret.txt`
 - `GITHUB_OAUTH_REDIRECT_URI` should match the callback URL configured in GitHub
 
 Example repo-root `.env` values:
