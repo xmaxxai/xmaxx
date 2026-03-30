@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="./logo.png" alt="XMAXX logo" width="220">
+</p>
+
 # XMAXX
 
 XMAXX is the codebase for the initial XMAXX platform footprint: AWS infrastructure, a K3s cluster, an app delivery path built around Docker and Helm, and the `xmaxx.ai` home experience built in React.
