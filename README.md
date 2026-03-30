@@ -16,7 +16,9 @@ The repo is intentionally managed as code first:
 ## Repository Layout
 
 - `home/`: React frontend, Docker image definition, and Helm chart for the `home` application.
+- `home-backend/`: Django backend scaffold, Docker image definition, and PostgreSQL-backed runtime settings for the `home` application.
 - `xmaxx-infra/`: Terraform for the base AWS network, K3s control plane node, API load balancer path, and Traefik configuration manifests.
+- `xmaxx-infra/k8s/postgres/`: EKS-oriented PostgreSQL manifests using a StatefulSet, EBS-backed storage, and operational guidance.
 - `xmaxx-infra-workers/`: Terraform for worker nodes and the app-facing network load balancer.
 - `documentation/`: architecture, operations, product, and audience-facing documentation.
 

@@ -1,0 +1,21 @@
+# StorageClass for production Postgres volumes on AWS EKS.
+# This relies on the Amazon EBS CSI driver being installed in the cluster.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: postgres-gp3
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "false"
+provisioner: ebs.csi.aws.com
+parameters:
+  # gp3 is the requested EBS volume type for live database storage.
+  type: gp3
+  fsType: ext4
+  # Keep storage encrypted at rest inside EBS.
+  encrypted: "true"
+  # Baseline gp3 performance values; tune per workload after measurement.
+  iops: "3000"
+  throughput: "125"
+reclaimPolicy: Retain
+allowVolumeExpansion: true
+volumeBindingMode: WaitForFirstConsumer
