@@ -2,6 +2,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { useEffect, useId, useRef, useState } from 'react'
 import heroImage from './assets/hero.png'
 import { BriefModal } from './components/BriefModal'
+import { ProfileWorkspace } from './components/ProfileWorkspace'
 import {
   InteractiveLink,
   InteractiveSurface,
@@ -14,6 +15,7 @@ import './index.css'
 
 const navLinks = [
   { label: 'Platform', href: '#platform' },
+  { label: 'Profile', href: '#profile' },
   { label: 'Focus', href: '#focus' },
   { label: 'Stack', href: '#stack' },
 ]
@@ -1012,6 +1014,8 @@ function App() {
             </StaggerItem>
           ))}
         </StaggerGroup>
+
+        <ProfileWorkspace authState={authState} onOpenLogin={handleOpenLogin} />
 
         <Reveal as={motion.section} className="focus section" id="focus">
           <div className="section-copy">

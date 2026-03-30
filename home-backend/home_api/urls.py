@@ -9,6 +9,7 @@ from .views import (
     google_login,
     health,
     index,
+    profile_detail,
 )
 
 
@@ -16,6 +17,7 @@ urlpatterns = [
     path("", index, name="index"),
     path("health/", health, name="health"),
     path("api/auth/session/", auth_session, name="auth-session"),
+    path("api/profile/", profile_detail, name="profile-detail"),
     path("api/auth/github/login/", github_login, name="github-login"),
     path("api/auth/github/callback/", github_callback, name="github-callback"),
     path("api/auth/google/login/", google_login, name="google-login"),
