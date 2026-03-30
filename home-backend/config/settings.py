@@ -118,8 +118,8 @@ SESSION_COOKIE_SAMESITE = "Lax"
 CSRF_COOKIE_SECURE = not DEBUG
 CSRF_COOKIE_SAMESITE = "Lax"
 
-# GitHub integration settings are loaded here so the backend can consume them once
-# webhook verification and OAuth endpoints are added.
+# OAuth integration settings are loaded here so the backend can expose provider
+# login flows from the same deployed Django service.
 GITHUB_WEBHOOK_SECRET = os.getenv("GITHUB_WEBHOOK_SECRET", "")
 GITHUB_OAUTH_CLIENT_ID = os.getenv("GITHUB_OAUTH_CLIENT_ID", "")
 GITHUB_OAUTH_CLIENT_SECRET = os.getenv("GITHUB_OAUTH_CLIENT_SECRET", "").strip()
@@ -129,3 +129,11 @@ GITHUB_OAUTH_AUTHORIZE_URL = "https://github.com/login/oauth/authorize"
 GITHUB_OAUTH_TOKEN_URL = "https://github.com/login/oauth/access_token"
 GITHUB_API_USER_URL = "https://api.github.com/user"
 GITHUB_API_EMAILS_URL = "https://api.github.com/user/emails"
+
+GOOGLE_OAUTH_CLIENT_ID = os.getenv("GOOGLE_OAUTH_CLIENT_ID", "")
+GOOGLE_OAUTH_CLIENT_SECRET = os.getenv("GOOGLE_OAUTH_CLIENT_SECRET", "").strip()
+GOOGLE_OAUTH_REDIRECT_URI = os.getenv("GOOGLE_OAUTH_REDIRECT_URI", "")
+GOOGLE_OAUTH_SCOPES = env_list("GOOGLE_OAUTH_SCOPES", "openid,email,profile")
+GOOGLE_OAUTH_AUTHORIZE_URL = "https://accounts.google.com/o/oauth2/v2/auth"
+GOOGLE_OAUTH_TOKEN_URL = "https://oauth2.googleapis.com/token"
+GOOGLE_API_USERINFO_URL = "https://openidconnect.googleapis.com/v1/userinfo"

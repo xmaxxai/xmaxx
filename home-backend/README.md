@@ -31,6 +31,10 @@ The backend reads configuration from the repo-root `.env` file, including:
 - `GITHUB_OAUTH_CLIENT_SECRET`
 - `GITHUB_OAUTH_REDIRECT_URI`
 - `GITHUB_OAUTH_SCOPES`
+- `GOOGLE_OAUTH_CLIENT_ID`
+- `GOOGLE_OAUTH_CLIENT_SECRET`
+- `GOOGLE_OAUTH_REDIRECT_URI`
+- `GOOGLE_OAUTH_SCOPES`
 
 By default, the backend expects the Kubernetes Postgres Service at `postgres.database.svc.cluster.local:5432`.
 
@@ -41,6 +45,13 @@ For GitHub integration:
 - `GITHUB_OAUTH_CLIENT_SECRET` must be set to the actual GitHub OAuth client secret value
 - `GITHUB_OAUTH_REDIRECT_URI` should match the callback URL configured in GitHub
 
+For Google integration:
+
+- `GOOGLE_OAUTH_CLIENT_ID` must come from the Google OAuth web application
+- `GOOGLE_OAUTH_CLIENT_SECRET` must be the raw Google OAuth client secret value
+- `GOOGLE_OAUTH_REDIRECT_URI` should match the callback URL configured in Google Cloud
+- `GOOGLE_OAUTH_SCOPES` defaults to `openid,email,profile`
+
 Example repo-root `.env` values:
 
 ```dotenv
@@ -48,13 +59,20 @@ GITHUB_OAUTH_CLIENT_ID=Iv23liF9YHQXRm2XBNDZ
 GITHUB_OAUTH_CLIENT_SECRET=your_real_github_client_secret
 GITHUB_OAUTH_REDIRECT_URI=https://xmaxx.ai/api/auth/github/callback/
 GITHUB_OAUTH_SCOPES=read:user,user:email
+GOOGLE_OAUTH_CLIENT_ID=your_google_client_id.apps.googleusercontent.com
+GOOGLE_OAUTH_CLIENT_SECRET=your_real_google_client_secret
+GOOGLE_OAUTH_REDIRECT_URI=https://xmaxx.ai/api/auth/google/callback/
+GOOGLE_OAUTH_SCOPES=openid,email,profile
 ```
 
 ## App Config Guide
 
-The backend now expects the GitHub OAuth client secret only through the `GITHUB_OAUTH_CLIENT_SECRET` environment variable.
+The backend now expects both OAuth providers to receive client secrets through direct environment variables:
 
-For Kubernetes deploys, the Helm chart renders `GITHUB_OAUTH_CLIENT_SECRET` into the Kubernetes `Secret` and exposes it directly as an environment variable in the backend container.
+- `GITHUB_OAUTH_CLIENT_SECRET`
+- `GOOGLE_OAUTH_CLIENT_SECRET`
+
+For Kubernetes deploys, the Helm chart renders both providers into the Kubernetes `Secret` and exposes them directly as environment variables in the backend container. The frontend then opens a provider chooser modal and completes the OAuth flow in a popup window while the backend handles the code exchange and session cookie.
 
 Deploy-time example:
 
@@ -64,16 +82,20 @@ KUBECONFIG=xmaxx-infra/kubeconfig.yaml helm upgrade --install home-backend ./hom
   --reuse-values \
   --set-string secrets.githubOauthClientId="$GITHUB_OAUTH_CLIENT_ID" \
   --set-string secrets.githubOauthClientSecret="$GITHUB_OAUTH_CLIENT_SECRET" \
-  --set-string env.githubOauthRedirectUri="$GITHUB_OAUTH_REDIRECT_URI"
+  --set-string env.githubOauthRedirectUri="$GITHUB_OAUTH_REDIRECT_URI" \
+  --set-string secrets.googleOauthClientId="$GOOGLE_OAUTH_CLIENT_ID" \
+  --set-string secrets.googleOauthClientSecret="$GOOGLE_OAUTH_CLIENT_SECRET" \
+  --set-string env.googleOauthRedirectUri="$GOOGLE_OAUTH_REDIRECT_URI"
 ```
 
 Verification commands:
 
 ```bash
-KUBECONFIG=xmaxx-infra/kubeconfig.yaml kubectl -n home exec deploy/home-backend -- sh -lc 'printenv GITHUB_OAUTH_CLIENT_ID && printenv GITHUB_OAUTH_CLIENT_SECRET | wc -c'
+KUBECONFIG=xmaxx-infra/kubeconfig.yaml kubectl -n home exec deploy/home-backend -- sh -lc 'printenv GITHUB_OAUTH_CLIENT_ID && printenv GOOGLE_OAUTH_CLIENT_ID'
 
 curl -ksS https://xmaxx.ai/api/auth/session/
 curl -ksSI 'https://xmaxx.ai/api/auth/github/login/?next=/'
+curl -ksSI 'https://xmaxx.ai/api/auth/google/login/?next=/'
 ```
 
 ## Docker
@@ -83,6 +105,17 @@ Build the backend image:
 ```bash
 docker build -t home-backend:local ./home-backend
 ```
+
+Release images should be pushed as multi-architecture manifests:
+
+```bash
+docker buildx build \
+  --platform linux/amd64,linux/arm64 \
+  -t athenalive/home:backend-latest \
+  --push ./home-backend
+```
+
+Do not ship an ARM-only backend tag to the cluster. The K3s rollout will fail with `no match for platform in manifest`.
 
 The container entrypoint runs `python manage.py migrate --noinput` before starting Gunicorn so the Django schema is applied when the database becomes reachable.
 
@@ -96,4 +129,7 @@ The chart creates:
 - a `Deployment`
 - a `Service`
 
-For deploy time, pass the client secret directly with `--set-string secrets.githubOauthClientSecret="$GITHUB_OAUTH_CLIENT_SECRET"`.
+For deploy time, pass the provider secrets directly with:
+
+- `--set-string secrets.githubOauthClientSecret="$GITHUB_OAUTH_CLIENT_SECRET"`
+- `--set-string secrets.googleOauthClientSecret="$GOOGLE_OAUTH_CLIENT_SECRET"`

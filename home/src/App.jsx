@@ -1,5 +1,5 @@
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
-import { useEffect, useId, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import heroImage from './assets/hero.png'
 import { BriefModal } from './components/BriefModal'
 import {
@@ -131,19 +131,98 @@ const proofPoints = [
   'High-trust interfaces that still feel premium and modern',
 ]
 
-const authErrorMessages = {
-  access_denied: 'GitHub sign-in was canceled before completion.',
-  exchange_failed: 'GitHub sign-in failed while the backend was exchanging credentials.',
-  invalid_secret_format:
-    'The mounted GitHub secret file is not a valid OAuth client secret string.',
-  missing_code: 'GitHub did not return an authorization code for this session.',
-  missing_client_id: 'The backend is missing the GitHub OAuth client ID.',
-  missing_client_secret:
-    'The backend is missing the GitHub OAuth client secret for the GitHub app.',
-  missing_redirect_uri:
-    'The backend is missing the GitHub OAuth redirect URI configuration.',
-  not_configured: 'GitHub auth is not configured on the backend yet.',
-  state_mismatch: 'GitHub sign-in could not be verified. Start a new login attempt.',
+const authProviders = [
+  {
+    id: 'github',
+    label: 'GitHub',
+    eyebrow: 'Deploy and source control',
+    description:
+      'Use repo-native identity for operator access, release workflows, and deployment-adjacent actions.',
+  },
+  {
+    id: 'google',
+    label: 'Google',
+    eyebrow: 'Workspace identity',
+    description:
+      'Use Google identity for email-based access now and future Workspace-connected operator flows later.',
+  },
+]
+
+function buildDefaultProviders() {
+  return Object.fromEntries(
+    authProviders.map(({ id }) => [
+      id,
+      {
+        configured: false,
+        configuredReason: '',
+      },
+    ]),
+  )
+}
+
+function buildInitialAuthState() {
+  return {
+    loading: true,
+    authenticated: false,
+    configured: false,
+    configuredReason: '',
+    provider: '',
+    providers: buildDefaultProviders(),
+    user: null,
+    error: '',
+  }
+}
+
+function getProviderLabel(provider) {
+  return authProviders.find((entry) => entry.id === provider)?.label ?? 'OAuth'
+}
+
+function getConfiguredProviders(authState) {
+  return authProviders.filter(({ id }) => authState.providers[id]?.configured)
+}
+
+function getProviderState(authState, provider) {
+  return authState.providers[provider] ?? {
+    configured: false,
+    configuredReason: '',
+  }
+}
+
+function getAuthErrorMessage(provider, code) {
+  const label = getProviderLabel(provider)
+
+  switch (code) {
+    case 'access_denied':
+      return `${label} sign-in was canceled before completion.`
+    case 'exchange_failed':
+      return `${label} sign-in failed while the backend was exchanging credentials.`
+    case 'invalid_secret_format':
+      return `The backend ${label} OAuth client secret is not a valid client secret string.`
+    case 'missing_code':
+      return `${label} did not return an authorization code for this session.`
+    case 'missing_client_id':
+      return `The backend is missing the ${label} OAuth client ID.`
+    case 'missing_client_secret':
+      return `The backend is missing the ${label} OAuth client secret.`
+    case 'missing_redirect_uri':
+      return `The backend is missing the ${label} OAuth redirect URI configuration.`
+    case 'no_providers_configured':
+      return 'No sign-in providers are configured on the backend yet.'
+    case 'not_configured':
+      return `${label} auth is not configured on the backend yet.`
+    case 'state_mismatch':
+      return `${label} sign-in could not be verified. Start a new login attempt.`
+    default:
+      return `${label} auth returned an unknown error.`
+  }
+}
+
+function getProviderStatusCopy(provider, configuredReason) {
+  if (!configuredReason) {
+    return 'Ready for sign-in.'
+  }
+
+  return getAuthErrorMessage(provider, configuredReason)
 }
 
 function buildAuthReturnPath() {
@@ -158,42 +237,57 @@ function buildAuthReturnPath() {
   return `${url.pathname}${query ? `?${query}` : ''}${url.hash}` || '/'
 }
 
+function buildAuthNotice({ provider, error, login, logout }) {
+  if (!provider) {
+    return null
+  }
+
+  const label = getProviderLabel(provider)
+
+  if (login === 'success') {
+    return {
+      tone: 'success',
+      title: `${label} connected`,
+      body: `This browser now has an active ${label}-backed session on the XMAXX home surface.`,
+    }
+  }
+
+  if (logout === 'success') {
+    return {
+      tone: 'info',
+      title: 'Signed out',
+      body: `The ${label} session for this browser has been cleared.`,
+    }
+  }
+
+  if (error) {
+    return {
+      tone: 'error',
+      title: `${label} login failed`,
+      body: getAuthErrorMessage(provider, error),
+    }
+  }
+
+  return null
+}
+
 function readAuthNotice() {
   if (typeof window === 'undefined') {
     return null
   }
 
   const url = new URL(window.location.href)
-
-  if (url.searchParams.get('auth') !== 'github') {
-    return null
-  }
+  const provider = url.searchParams.get('auth')
 
   const error = url.searchParams.get('error')
   const login = url.searchParams.get('login')
   const logout = url.searchParams.get('logout')
 
-  let notice = null
-
-  if (login === 'success') {
-    notice = {
-      tone: 'success',
-      title: 'GitHub connected',
-      body: 'This browser now has an active GitHub-backed session on the XMAXX home surface.',
-    }
-  } else if (logout === 'success') {
-    notice = {
-      tone: 'info',
-      title: 'Signed out',
-      body: 'The GitHub session for this browser has been cleared.',
-    }
-  } else if (error) {
-    notice = {
-      tone: 'error',
-      title: 'GitHub login failed',
-      body: authErrorMessages[error] ?? 'GitHub auth returned an unknown error.',
-    }
+  if (!provider || (!error && !login && !logout)) {
+    return null
   }
+
+  const notice = buildAuthNotice({ provider, error, login, logout })
 
   ;['auth', 'login', 'logout', 'error'].forEach((key) => url.searchParams.delete(key))
   const query = url.searchParams.toString()
@@ -203,12 +297,117 @@ function readAuthNotice() {
   return notice
 }
 
-function AuthControls({ authState, onLogin, onLogout, stacked = false, onAction }) {
+async function requestAuthSession(signal) {
+  const response = await fetch('/api/auth/session/', {
+    credentials: 'same-origin',
+    headers: { Accept: 'application/json' },
+    signal,
+  })
+
+  if (!response.ok) {
+    throw new Error(`Auth session request failed with status ${response.status}`)
+  }
+
+  const payload = await response.json()
+  const providerState = buildDefaultProviders()
+
+  authProviders.forEach(({ id }) => {
+    providerState[id] = {
+      configured: Boolean(payload.providers?.[id]?.configured),
+      configuredReason: payload.providers?.[id]?.configuredReason ?? '',
+    }
+  })
+
+  return {
+    loading: false,
+    authenticated: Boolean(payload.authenticated),
+    configured: Boolean(payload.configured),
+    configuredReason: payload.configuredReason ?? '',
+    provider: payload.provider ?? '',
+    providers: providerState,
+    user: payload.user ?? null,
+    error: '',
+  }
+}
+
+async function syncAuthSession(setAuthState, signal) {
+  try {
+    const payload = await requestAuthSession(signal)
+    setAuthState(payload)
+  } catch (error) {
+    if (signal?.aborted) {
+      return
+    }
+
+    setAuthState({
+      ...buildInitialAuthState(),
+      loading: false,
+      error: error instanceof Error ? error.message : 'Unable to load auth session',
+    })
+  }
+}
+
+function openAuthPopup(provider, url) {
+  const width = 560
+  const height = 720
+  const left = Math.max(window.screenX + (window.outerWidth - width) / 2, 0)
+  const top = Math.max(window.screenY + (window.outerHeight - height) / 2, 0)
+  const features = [
+    'popup=yes',
+    'resizable=yes',
+    'scrollbars=yes',
+    `width=${Math.round(width)}`,
+    `height=${Math.round(height)}`,
+    `left=${Math.round(left)}`,
+    `top=${Math.round(top)}`,
+  ].join(',')
+
+  return window.open(url, `xmaxx-auth-${provider}`, features)
+}
+
+function getUserInitial(authState) {
+  const seed =
+    authState.user?.name ||
+    authState.user?.email ||
+    authState.user?.login ||
+    getProviderLabel(authState.provider)
+
+  return seed.slice(0, 1).toUpperCase()
+}
+
+function getUserSecondaryLabel(authState) {
+  const providerLabel = getProviderLabel(authState.provider)
+
+  if (authState.provider === 'github' && authState.user?.login) {
+    return `${providerLabel} • @${authState.user.login}`
+  }
+
+  if (authState.user?.email) {
+    return `${providerLabel} • ${authState.user.email}`
+  }
+
+  if (authState.user?.login) {
+    return `${providerLabel} • ${authState.user.login}`
+  }
+
+  return providerLabel
+}
+
+function AuthControls({
+  authState,
+  onOpenLogin,
+  onLogout,
+  stacked = false,
+  onAction,
+  busyProvider = '',
+}) {
   const className = `auth-actions${stacked ? ' auth-actions--stacked' : ''}`
+  const availableProviders = getConfiguredProviders(authState)
+  const secondaryLabel = getUserSecondaryLabel(authState)
 
   const handleLogin = () => {
     onAction?.()
-    onLogin()
+    onOpenLogin()
   }
 
   const handleLogout = () => {
@@ -221,20 +420,18 @@ function AuthControls({ authState, onLogin, onLogout, stacked = false, onAction 
       <div className={className}>
         <div className="session-pill" aria-live="polite">
           <span className="session-pill__status" />
-          <span>Checking GitHub access</span>
+          <span>Checking operator access</span>
         </div>
       </div>
     )
   }
 
   if (authState.authenticated && authState.user) {
-    const initial = authState.user.login?.slice(0, 1)?.toUpperCase() ?? 'G'
-
     return (
       <div className={className}>
         <a
           className="session-pill session-pill--link"
-          href={authState.user.profile_url || 'https://github.com'}
+          href={authState.user.profile_url || '#top'}
           target="_blank"
           rel="noreferrer"
         >
@@ -242,16 +439,16 @@ function AuthControls({ authState, onLogin, onLogout, stacked = false, onAction 
             <img
               className="session-pill__avatar"
               src={authState.user.avatar_url}
-              alt={`${authState.user.login} avatar`}
+              alt={`${authState.user.name} avatar`}
             />
           ) : (
             <span className="session-pill__avatar session-pill__avatar--fallback">
-              {initial}
+              {getUserInitial(authState)}
             </span>
           )}
           <span className="session-pill__copy">
             <strong>{authState.user.name}</strong>
-            <small>@{authState.user.login}</small>
+            <small>{secondaryLabel}</small>
           </span>
         </a>
 
@@ -273,32 +470,41 @@ function AuthControls({ authState, onLogin, onLogout, stacked = false, onAction 
         type="button"
         className="button button--ghost button--small"
         onClick={handleLogin}
-        disabled={!authState.configured || Boolean(authState.error)}
-        whileTap={{ scale: authState.configured && !authState.error ? 0.98 : 1 }}
+        disabled={!authState.configured || Boolean(authState.error) || Boolean(busyProvider)}
+        whileTap={{
+          scale:
+            authState.configured && !authState.error && !busyProvider
+              ? 0.98
+              : 1,
+        }}
       >
-        {authState.configured && !authState.error
-          ? 'Login with GitHub'
-          : authState.configuredReason === 'invalid_secret_format'
-            ? 'GitHub secret invalid'
-            : 'GitHub auth not configured'}
+        {authState.error
+          ? 'Auth unavailable'
+          : busyProvider
+            ? `Finishing ${getProviderLabel(busyProvider)}…`
+            : availableProviders.length > 0
+              ? 'Choose sign-in'
+              : 'Auth not configured'}
       </motion.button>
     </div>
   )
 }
 
-function AuthCard({ authState, notice, onLogin, onLogout }) {
+function AuthCard({ authState, notice, onOpenLogin, onLogout, busyProvider }) {
   const isAuthenticated = authState.authenticated && authState.user
+  const configuredProviders = getConfiguredProviders(authState)
+  const configuredProviderNames = configuredProviders.map(({ label }) => label).join(' or ')
   const title = authState.loading
-    ? 'Checking GitHub access for this browser.'
+    ? 'Checking operator access for this browser.'
     : authState.error
       ? 'The auth session endpoint is not responding yet.'
       : isAuthenticated
         ? `Welcome back, ${authState.user.name}.`
         : authState.configured
-          ? 'Sign in with GitHub to unlock the private operator surface.'
-          : authState.configuredReason === 'invalid_secret_format'
-            ? 'The mounted GitHub secret file is not a valid OAuth client secret.'
-            : 'GitHub auth is staged but not configured yet.'
+          ? configuredProviders.length > 1
+            ? 'Choose Google or GitHub to unlock the private operator surface.'
+            : `Sign in with ${configuredProviderNames} to unlock the private operator surface.`
+          : 'Operator auth is staged but not configured yet.'
 
   const body = authState.loading
     ? 'The landing page is verifying whether a session already exists on the home backend.'
@@ -307,10 +513,8 @@ function AuthCard({ authState, notice, onLogin, onLogout }) {
       : isAuthenticated
         ? 'This session is tied to the deployed Django backend, so private workflows can recognize the signed-in operator across the same `xmaxx.ai` origin.'
         : authState.configured
-          ? 'The frontend now hands login to the Django backend, which completes the GitHub OAuth exchange and sets the session cookie on return.'
-          : authState.configuredReason === 'invalid_secret_format'
-            ? 'The secret volume is mounted, but the file contents look like a PEM certificate instead of the raw GitHub client secret string.'
-            : 'Once the GitHub OAuth client settings are valid in the backend secret, this control will redirect through the deployed callback flow.'
+          ? 'The auth surface opens a provider chooser in-place, then hands sign-in to a popup so the backend can finish the OAuth exchange without bouncing the landing page away from the user.'
+          : 'Once at least one provider has valid OAuth settings in the backend secret, this control will enable the deployed callback flow.'
 
   const badgeClass = authState.loading
     ? 'auth-badge auth-badge--muted'
@@ -344,6 +548,24 @@ function AuthCard({ authState, notice, onLogin, onLogout }) {
 
       <p className="auth-card__body">{body}</p>
 
+       <div className="auth-provider-strip" aria-label="Available sign-in providers">
+        {authProviders.map((provider) => {
+          const providerState = getProviderState(authState, provider.id)
+
+          return (
+            <div
+              key={provider.id}
+              className={`auth-provider-chip${
+                providerState.configured ? ' auth-provider-chip--live' : ''
+              }`}
+            >
+              <strong>{provider.label}</strong>
+              <small>{providerState.configured ? 'Ready' : 'Setup needed'}</small>
+            </div>
+          )
+        })}
+      </div>
+
       {notice ? (
         <div className={`auth-notice auth-notice--${notice.tone}`} role="status">
           <strong>{notice.title}</strong>
@@ -351,8 +573,120 @@ function AuthCard({ authState, notice, onLogin, onLogout }) {
         </div>
       ) : null}
 
-      <AuthControls authState={authState} onLogin={onLogin} onLogout={onLogout} />
+      <AuthControls
+        authState={authState}
+        onOpenLogin={onOpenLogin}
+        onLogout={onLogout}
+        busyProvider={busyProvider}
+      />
     </div>
+  )
+}
+
+function AuthModal({ open, onClose, authState, onSelectProvider, busyProvider = '' }) {
+  if (!open) {
+    return null
+  }
+
+  return (
+    <motion.div
+      className="overlay"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+      onClick={onClose}
+    >
+      <motion.div
+        className="auth-modal surface"
+        initial={{ opacity: 0, y: 16, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 16, scale: 0.98 }}
+        transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="auth-modal__header">
+          <div>
+            <p className="eyebrow">Choose sign-in</p>
+            <h2>Select the identity system that should own this browser session.</h2>
+          </div>
+          <button
+            type="button"
+            className="icon-button"
+            onClick={onClose}
+            aria-label="Close sign-in options"
+          >
+            ×
+          </button>
+        </div>
+
+        <p className="auth-modal__lede">
+          The backend completes the OAuth code exchange on `xmaxx.ai` and sets the
+          session cookie there. The popup closes automatically when the flow
+          finishes.
+        </p>
+
+        {authState.error ? (
+          <div className="auth-notice auth-notice--error" role="status">
+            <strong>Auth session unavailable</strong>
+            <span>{authState.error}</span>
+          </div>
+        ) : null}
+
+        {busyProvider ? (
+          <div className="auth-notice auth-notice--info" role="status">
+            <strong>Complete {getProviderLabel(busyProvider)} sign-in</strong>
+            <span>
+              Finish the flow in the popup window. This page will refresh the
+              session automatically when the provider returns.
+            </span>
+          </div>
+        ) : null}
+
+        <div className="auth-provider-grid">
+          {authProviders.map((provider) => {
+            const providerState = getProviderState(authState, provider.id)
+            const disabled =
+              Boolean(authState.error) ||
+              !providerState.configured ||
+              Boolean(busyProvider)
+
+            return (
+              <motion.button
+                key={provider.id}
+                type="button"
+                className={`auth-provider-option${
+                  providerState.configured ? ' auth-provider-option--ready' : ''
+                }`}
+                disabled={disabled}
+                onClick={() => onSelectProvider(provider.id)}
+                whileTap={{ scale: disabled ? 1 : 0.985 }}
+              >
+                <div className="auth-provider-option__header">
+                  <div>
+                    <p className="auth-provider-option__eyebrow">{provider.eyebrow}</p>
+                    <h3>{provider.label}</h3>
+                  </div>
+                  <span
+                    className={`auth-provider-option__status${
+                      providerState.configured
+                        ? ' auth-provider-option__status--ready'
+                        : ''
+                    }`}
+                  >
+                    {providerState.configured ? 'Ready' : 'Setup needed'}
+                  </span>
+                </div>
+                <p>{provider.description}</p>
+                <span className="auth-provider-option__hint">
+                  {getProviderStatusCopy(provider.id, providerState.configuredReason)}
+                </span>
+              </motion.button>
+            )
+          })}
+        </div>
+      </motion.div>
+    </motion.div>
   )
 }
 
@@ -440,26 +774,14 @@ function HeroPreview({ ready, onReady }) {
 function App() {
   const [activeLens, setActiveLens] = useState('operators')
   const [isBriefOpen, setIsBriefOpen] = useState(false)
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [heroReady, setHeroReady] = useState(false)
-  const [authNotice, setAuthNotice] = useState(null)
-  const [authState, setAuthState] = useState({
-    loading: true,
-    authenticated: false,
-    configured: false,
-    configuredReason: '',
-    user: null,
-    error: '',
-  })
+  const [authNotice, setAuthNotice] = useState(() => readAuthNotice())
+  const [authState, setAuthState] = useState(buildInitialAuthState)
+  const [authBusyProvider, setAuthBusyProvider] = useState('')
   const menuId = useId()
-
-  useEffect(() => {
-    const notice = readAuthNotice()
-
-    if (notice) {
-      setAuthNotice(notice)
-    }
-  }, [])
+  const authPopupMonitorRef = useRef(0)
 
   useEffect(() => {
     if (!isMenuOpen) {
@@ -485,47 +807,51 @@ function App() {
   useEffect(() => {
     const controller = new AbortController()
 
-    async function loadAuthSession() {
-      try {
-        const response = await fetch('/api/auth/session/', {
-          credentials: 'same-origin',
-          headers: { Accept: 'application/json' },
-          signal: controller.signal,
-        })
-
-        if (!response.ok) {
-          throw new Error(`Auth session request failed with status ${response.status}`)
-        }
-
-        const payload = await response.json()
-
-        setAuthState({
-          loading: false,
-          authenticated: Boolean(payload.authenticated),
-          configured: Boolean(payload.configured),
-          configuredReason: payload.configuredReason ?? '',
-          user: payload.user ?? null,
-          error: '',
-        })
-      } catch (error) {
-        if (controller.signal.aborted) {
-          return
-        }
-
-        setAuthState({
-          loading: false,
-          authenticated: false,
-          configured: false,
-          configuredReason: '',
-          user: null,
-          error: error instanceof Error ? error.message : 'Unable to load auth session',
-        })
-      }
-    }
-
-    loadAuthSession()
+    void syncAuthSession(setAuthState, controller.signal)
 
     return () => controller.abort()
+  }, [])
+
+  useEffect(() => {
+    const handleMessage = (event) => {
+      if (event.origin !== window.location.origin) {
+        return
+      }
+
+      if (event.data?.source !== 'xmaxx-oauth') {
+        return
+      }
+
+      if (authPopupMonitorRef.current) {
+        window.clearInterval(authPopupMonitorRef.current)
+        authPopupMonitorRef.current = 0
+      }
+
+      setAuthBusyProvider('')
+      setIsAuthModalOpen(false)
+
+      const notice = buildAuthNotice(event.data)
+
+      if (notice) {
+        setAuthNotice(notice)
+      }
+
+      void syncAuthSession(setAuthState)
+    }
+
+    window.addEventListener('message', handleMessage)
+
+    return () => {
+      window.removeEventListener('message', handleMessage)
+    }
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      if (authPopupMonitorRef.current) {
+        window.clearInterval(authPopupMonitorRef.current)
+      }
+    }
   }, [])
 
   const rankedCapabilities = [...capabilities].sort(
@@ -534,13 +860,47 @@ function App() {
   const activeLensData =
     lenses.find((lens) => lens.id === activeLens) ?? lenses[0]
 
-  const handleGitHubLogin = () => {
-    window.location.assign(
-      `/api/auth/github/login/?next=${encodeURIComponent(buildAuthReturnPath())}`,
-    )
+  const handleOpenLogin = () => {
+    setIsAuthModalOpen(true)
   }
 
-  const handleGitHubLogout = () => {
+  const handleProviderLogin = (provider) => {
+    const nextPath = buildAuthReturnPath()
+    const popupUrl = `/api/auth/${provider}/login/?popup=1&next=${encodeURIComponent(nextPath)}`
+    const fallbackUrl = `/api/auth/${provider}/login/?next=${encodeURIComponent(nextPath)}`
+    const popup = openAuthPopup(provider, popupUrl)
+
+    if (!popup) {
+      window.location.assign(fallbackUrl)
+      return
+    }
+
+    if (authPopupMonitorRef.current) {
+      window.clearInterval(authPopupMonitorRef.current)
+    }
+
+    popup.focus()
+    setAuthBusyProvider(provider)
+    setAuthNotice({
+      tone: 'info',
+      title: `Continue with ${getProviderLabel(provider)}`,
+      body: 'Finish sign-in in the popup window. This page will refresh the session when the provider returns.',
+    })
+    setIsAuthModalOpen(false)
+
+    authPopupMonitorRef.current = window.setInterval(() => {
+      if (!popup.closed) {
+        return
+      }
+
+      window.clearInterval(authPopupMonitorRef.current)
+      authPopupMonitorRef.current = 0
+      setAuthBusyProvider('')
+      void syncAuthSession(setAuthState)
+    }, 500)
+  }
+
+  const handleLogout = () => {
     window.location.assign(
       `/api/auth/logout/?next=${encodeURIComponent(buildAuthReturnPath())}`,
     )
@@ -570,8 +930,9 @@ function App() {
             <div className="topbar__auth">
               <AuthControls
                 authState={authState}
-                onLogin={handleGitHubLogin}
-                onLogout={handleGitHubLogout}
+                onOpenLogin={handleOpenLogin}
+                onLogout={handleLogout}
+                busyProvider={authBusyProvider}
               />
             </div>
           </div>
@@ -616,8 +977,9 @@ function App() {
             <AuthCard
               authState={authState}
               notice={authNotice}
-              onLogin={handleGitHubLogin}
-              onLogout={handleGitHubLogout}
+              onOpenLogin={handleOpenLogin}
+              onLogout={handleLogout}
+              busyProvider={authBusyProvider}
             />
 
             <ul className="proof-list" aria-label="XMAXX proof points">
@@ -860,12 +1222,13 @@ function App() {
               </div>
 
               <div className="mobile-panel__auth">
-                <p className="eyebrow">GitHub access</p>
+                <p className="eyebrow">Operator access</p>
                 <AuthControls
                   authState={authState}
-                  onLogin={handleGitHubLogin}
-                  onLogout={handleGitHubLogout}
+                  onOpenLogin={handleOpenLogin}
+                  onLogout={handleLogout}
                   stacked
+                  busyProvider={authBusyProvider}
                   onAction={() => setIsMenuOpen(false)}
                 />
               </div>
@@ -883,6 +1246,18 @@ function App() {
               </InteractiveLink>
             </motion.aside>
           </motion.div>
+        ) : null}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {isAuthModalOpen ? (
+          <AuthModal
+            open={isAuthModalOpen}
+            onClose={() => setIsAuthModalOpen(false)}
+            authState={authState}
+            onSelectProvider={handleProviderLogin}
+            busyProvider={authBusyProvider}
+          />
         ) : null}
       </AnimatePresence>
 

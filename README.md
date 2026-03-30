@@ -32,6 +32,31 @@ The repo is intentionally managed as code first:
 - Public app domain: `xmaxx.ai`
 - Public control-plane domain: `k3s-api.xmaxx.ai`
 
+## Container Images
+
+The published Docker tags for `home` and `home-backend` should be multi-architecture manifests, not single-architecture images.
+
+Current requirement:
+
+- publish `linux/amd64,linux/arm64`
+- do not push ARM-only tags for releases that the cluster will consume
+- keep the mutable tags such as `latest` and `backend-latest` multi-arch as well, not just the versioned tags
+
+Recommended release pattern:
+
+```bash
+docker buildx build \
+  --platform linux/amd64,linux/arm64 \
+  -t athenalive/home:<tag> \
+  --push <context>
+```
+
+Reason:
+
+- the live K3s nodes are not guaranteed to match local development architecture
+- Macs used for development may be `arm64` while cluster nodes often pull `amd64`
+- a multi-arch manifest avoids `no match for platform in manifest` pull failures during rollout
+
 ## Documentation
 
 Start here:
@@ -44,12 +69,18 @@ Start here:
 
 ## App Config Notes
 
-The `home-backend` GitHub OAuth secret is supplied as `GITHUB_OAUTH_CLIENT_SECRET` through the Kubernetes secret/env path.
+The `home-backend` OAuth secrets are supplied through the Kubernetes secret/env path:
+
+- `GITHUB_OAUTH_CLIENT_SECRET`
+- `GOOGLE_OAUTH_CLIENT_SECRET`
 
 Important constraint:
 
 - `GITHUB_OAUTH_CLIENT_SECRET` must be the raw GitHub OAuth client secret value
+- `GOOGLE_OAUTH_CLIENT_SECRET` must be the raw Google OAuth client secret value
 - a PEM or certificate file is not a valid GitHub OAuth client secret
+
+The deployed frontend now opens a provider chooser modal and completes OAuth in a popup while the Django backend handles the callback flow on the same `xmaxx.ai` origin.
 
 The detailed app config and deploy-time secret guidance lives in `home-backend/README.md`.
 

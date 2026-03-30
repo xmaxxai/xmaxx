@@ -56,6 +56,16 @@ spec:
                 secretKeyRef:
                   name: {{ include "home-backend.fullname" . }}
                   key: GITHUB_OAUTH_CLIENT_SECRET
+            - name: GOOGLE_OAUTH_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "home-backend.fullname" . }}
+                  key: GOOGLE_OAUTH_CLIENT_ID
+            - name: GOOGLE_OAUTH_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "home-backend.fullname" . }}
+                  key: GOOGLE_OAUTH_CLIENT_SECRET
             - name: POSTGRES_HOST
               value: {{ .Values.env.postgresHost | quote }}
             - name: POSTGRES_PORT
@@ -74,6 +84,10 @@ spec:
               value: {{ .Values.env.githubOauthRedirectUri | quote }}
             - name: GITHUB_OAUTH_SCOPES
               value: {{ .Values.env.githubOauthScopes | quote }}
+            - name: GOOGLE_OAUTH_REDIRECT_URI
+              value: {{ .Values.env.googleOauthRedirectUri | quote }}
+            - name: GOOGLE_OAUTH_SCOPES
+              value: {{ .Values.env.googleOauthScopes | quote }}
             - name: RUN_MIGRATIONS_ON_STARTUP
               value: {{ .Values.env.runMigrationsOnStartup | quote }}
             - name: DATABASE_STARTUP_MAX_ATTEMPTS

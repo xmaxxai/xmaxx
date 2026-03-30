@@ -79,16 +79,20 @@ Build the image locally:
 docker build -t home:local .
 ```
 
-Build and push an amd64 image for the cluster:
+Release images must be published as multi-architecture manifests so both local ARM machines and amd64 cluster nodes can pull the same tag safely.
+
+Build and push the release image:
 
 ```bash
 docker buildx build \
-  --platform linux/amd64 \
+  --platform linux/amd64,linux/arm64 \
   --provenance=false \
   --sbom=false \
   -t <registry-user>/home:latest \
   --push .
 ```
+
+Do not publish an ARM-only tag for production rollout. The cluster will fail to pull it with `no match for platform in manifest`.
 
 ## Kubernetes Release
 
