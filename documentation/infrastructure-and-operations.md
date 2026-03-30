@@ -71,7 +71,7 @@ Terraform is the source of truth for:
 
 Operational rule:
 
-- do not commit `terraform.tfvars`
+- do not commit plain-text `terraform.tfvars`
 - do not commit Terraform state
 - do commit `.terraform.lock.hcl`
 
@@ -167,7 +167,7 @@ curl -I https://xmaxx.ai
 
 ## Security Rules
 
-The repository should never contain:
+The repository should never contain plain-text:
 
 - kubeconfigs
 - Terraform state
@@ -175,7 +175,14 @@ The repository should never contain:
 - live cluster tokens
 - private keys or PEM material
 
-That is why the repo-root `.gitignore` blocks those files.
+That is why the repo-root `.gitignore` blocks those files by default.
+
+Exception:
+
+- `xmaxx-infra-workers/terraform.tfvars`
+- `xmaxx-infra/kubeconfig.yaml`
+
+Those two files may be committed only when `git-crypt` is initialized and the files are encrypted in Git. See `documentation/git-crypt.md`.
 
 ## Change Management Guidance
 

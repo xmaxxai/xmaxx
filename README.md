@@ -7,7 +7,7 @@ The repo is intentionally managed as code first:
 - Infrastructure is described in Terraform.
 - Cluster ingress and certificate behavior are described in Kubernetes and Helm configuration.
 - The frontend is built as a container and deployed through the cluster.
-- Sensitive runtime material such as kubeconfigs, Terraform state, and private variables are excluded from Git.
+- Sensitive runtime material is either excluded from Git or committed only through `git-crypt`.
 
 ## Repository Layout
 
@@ -37,7 +37,7 @@ Start here:
 
 ## Security Note
 
-The repository is designed to avoid committing:
+The repository is designed to avoid committing plain-text:
 
 - kubeconfigs
 - Terraform state
@@ -46,3 +46,10 @@ The repository is designed to avoid committing:
 - local dependency and build artifacts
 
 That policy is enforced by the repo-root `.gitignore`.
+
+Two paths are explicitly approved for encrypted storage through `git-crypt`:
+
+- `xmaxx-infra-workers/terraform.tfvars`
+- `xmaxx-infra/kubeconfig.yaml`
+
+Bootstrap and collaborator access steps are documented in `documentation/git-crypt.md`.

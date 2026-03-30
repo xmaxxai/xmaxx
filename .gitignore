@@ -32,6 +32,10 @@ override.tf.json
 terraform.tfvars
 terraform.tfvars.json
 
+# git-crypt-managed secrets that are allowed in Git when encrypted
+!xmaxx-infra-workers/terraform.tfvars
+!xmaxx-infra/kubeconfig.yaml
+
 # Node / build artifacts
 **/node_modules/
 **/dist/
