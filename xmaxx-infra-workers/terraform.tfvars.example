@@ -1,0 +1,8 @@
+vpc_id    = "vpc-090d36edff56261a5"
+subnet_id = "subnet-0785d3543276a4d6b"
+
+# Example:
+# k3s_url   = "https://18.188.245.35:6443"
+# k3s_token = "K10..."
+k3s_url   = ""
+k3s_token = ""

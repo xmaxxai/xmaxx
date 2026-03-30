@@ -1,0 +1,22 @@
+namespace: home
+
+replicaCount: 2
+
+image:
+  repository: athenalive/home
+  tag: latest
+  pullPolicy: Always
+
+service:
+  port: 80
+
+ingress:
+  className: traefik
+  hosts:
+    - xmaxx.ai
+  tls:
+    enabled: true
+    secretName: ""
+    certResolver: letsencrypt
+
+resources: {}

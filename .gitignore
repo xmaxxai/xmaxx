@@ -1,0 +1,42 @@
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+
+# Secrets / keys / certs
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+*.ovpn
+*.mobileconfig
+*kubeconfig*
+**/kubeconfig.yaml
+
+# Env files
+.env
+.env.*
+*.local
+
+# Terraform local state and caches
+**/.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+terraform.tfvars
+terraform.tfvars.json
+
+# Node / build artifacts
+**/node_modules/
+**/dist/
+**/dist-ssr/
+
+# Local cert material and ACME storage
+vpn-certs/
+acme.json
