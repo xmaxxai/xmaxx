@@ -147,11 +147,11 @@ button:focus-visible {
   top: 18px;
   z-index: 10;
   border-radius: 999px;
-  padding: 14px 18px;
+  padding: 12px 16px 12px 18px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 18px;
 }
 
 .brand {
@@ -176,20 +176,69 @@ button:focus-visible {
 
 .topnav {
   display: flex;
-  gap: 8px;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.52);
+  border: 1px solid rgba(28, 23, 17, 0.06);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.32);
 }
 
 .topnav__link {
-  padding: 10px 14px;
+  padding: 10px 12px;
   border-radius: 999px;
   color: var(--muted);
-  font-size: 0.96rem;
+  font-size: 0.9rem;
+  font-weight: 700;
 }
 
-.topbar__actions {
+.topbar__dock {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+
+.topbar__auth {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.topbar__auth .auth-actions {
+  margin-top: 0;
+  flex-wrap: nowrap;
   gap: 10px;
+}
+
+.topbar__auth .button {
+  min-height: 42px;
+}
+
+.topbar__auth .session-pill {
+  min-height: 42px;
+  padding-inline: 8px 12px;
+  background: rgba(255, 255, 255, 0.64);
+}
+
+.topbar__auth .session-pill--link {
+  max-width: min(280px, 28vw);
+}
+
+.topbar__auth .session-pill__avatar {
+  width: 30px;
+  height: 30px;
+}
+
+.topbar__auth .session-pill__copy strong {
+  font-size: 0.9rem;
+}
+
+.topbar__auth .session-pill__copy small {
+  font-size: 0.75rem;
 }
 
 .menu-toggle {
@@ -1066,7 +1115,7 @@ h3 {
   }
 
   .topnav,
-  .topbar__actions {
+  .topbar__dock {
     display: none;
   }
 

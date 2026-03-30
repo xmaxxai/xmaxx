@@ -1,7 +1,6 @@
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { useEffect, useId, useState } from 'react'
 import heroImage from './assets/hero.png'
-import { AudienceMenu } from './components/AudienceMenu'
 import { BriefModal } from './components/BriefModal'
 import {
   InteractiveLink,
@@ -559,33 +558,22 @@ function App() {
             <small>software • hardware • AI</small>
           </a>
 
-          <nav className="topnav" aria-label="Primary">
-            {navLinks.map((link) => (
-              <InteractiveLink key={link.href} className="topnav__link" href={link.href}>
-                {link.label}
-              </InteractiveLink>
-            ))}
-          </nav>
+          <div className="topbar__dock">
+            <nav className="topnav" aria-label="Primary">
+              {navLinks.map((link) => (
+                <InteractiveLink key={link.href} className="topnav__link" href={link.href}>
+                  {link.label}
+                </InteractiveLink>
+              ))}
+            </nav>
 
-          <div className="topbar__actions">
-            <AudienceMenu
-              activeValue={activeLens}
-              onSelect={setActiveLens}
-              options={lenses}
-            />
-            <AuthControls
-              authState={authState}
-              onLogin={handleGitHubLogin}
-              onLogout={handleGitHubLogout}
-            />
-            <InteractiveLink
-              as={motion.button}
-              type="button"
-              className="button button--solid button--small"
-              onClick={() => setIsBriefOpen(true)}
-            >
-              Operator brief
-            </InteractiveLink>
+            <div className="topbar__auth">
+              <AuthControls
+                authState={authState}
+                onLogin={handleGitHubLogin}
+                onLogout={handleGitHubLogout}
+              />
+            </div>
           </div>
 
           <InteractiveLink
