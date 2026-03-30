@@ -8,7 +8,6 @@ import {
   useRef,
   useState,
 } from 'react'
-import heroImage from './assets/hero.png'
 import {
   InteractiveLink,
   InteractiveSurface,
@@ -1542,8 +1541,8 @@ function App() {
 
             <img
               className="signal-card__image"
-              src={heroImage}
-              alt="Abstract system topology"
+              src="/waterbox.png"
+              alt="Waterbox product"
             />
           </div>
         </Reveal>

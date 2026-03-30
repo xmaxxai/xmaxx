@@ -464,11 +464,11 @@ h3,
 }
 
 .signal-card__image {
-  width: calc(100% + 50px);
-  max-width: none;
-  margin: 12px -25px -25px;
-  opacity: 0.82;
-  mix-blend-mode: screen;
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  margin-top: 16px;
+  object-fit: contain;
 }
 
 .signal-card__strips {
