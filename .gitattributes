@@ -1,0 +1,3 @@
+# Files approved for encrypted storage in Git via git-crypt.
+xmaxx-infra-workers/terraform.tfvars filter=git-crypt diff=git-crypt
+xmaxx-infra/kubeconfig.yaml filter=git-crypt diff=git-crypt

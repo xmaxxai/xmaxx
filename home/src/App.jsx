@@ -483,8 +483,8 @@ function App() {
             >
               Start the conversation
             </InteractiveLink>
-            <InteractiveLink className="button button--ghost button--contrast" href="mailto:hello@xmaxx.ai">
-              hello@xmaxx.ai
+            <InteractiveLink className="button button--ghost button--contrast" href="mailto:info@xmaxx.ai">
+              info@xmaxx.ai
             </InteractiveLink>
           </div>
         </Reveal>

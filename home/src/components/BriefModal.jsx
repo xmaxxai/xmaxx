@@ -97,9 +97,9 @@ export function BriefModal({ open, onClose }) {
             <div className="brief-modal__actions">
               <InteractiveLink
                 className="button button--solid"
-                href="mailto:hello@xmaxx.ai?subject=Operator%20Brief"
+                href="mailto:info@xmaxx.ai?subject=Operator%20Brief"
               >
-                hello@xmaxx.ai
+                info@xmaxx.ai
               </InteractiveLink>
               <InteractiveLink
                 className="button button--ghost"
