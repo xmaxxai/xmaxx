@@ -194,6 +194,7 @@ final class AppStore: ObservableObject {
     private var speakingTask: Task<Void, Never>?
     private var didTriggerPermissionProbes = false
     private var didAutoStart = false
+    private var liveVoiceLoopContext = ""
     private let speechCoordinator = SpeechCoordinator()
     private let missionTranscriber = MissionTranscriber()
 
@@ -481,10 +482,7 @@ final class AppStore: ObservableObject {
         let trimmedMission = missionText.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedEnvironment = environmentText.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedOperatorFeedback = operatorFeedback.trimmingCharacters(in: .whitespacesAndNewlines)
-        let runtimeEnvironment = composeEnvironment(
-            base: trimmedEnvironment,
-            supplemental: supplementalEnvironment
-        )
+        liveVoiceLoopContext = supplementalEnvironment.trimmingCharacters(in: .whitespacesAndNewlines)
 
         guard !trimmedMission.isEmpty else {
             status = .failed
@@ -509,7 +507,7 @@ final class AppStore: ObservableObject {
             do {
                 try await runLoopSession(
                     mission: trimmedMission,
-                    environment: runtimeEnvironment,
+                    environment: trimmedEnvironment,
                     operatorFeedback: trimmedOperatorFeedback
                 )
             } catch {
@@ -563,9 +561,11 @@ final class AppStore: ObservableObject {
         listeningRestartTask?.cancel()
 
         if isRecordingMission {
-            guard !isAgentSpeaking, status != .running else { return }
+            guard !isAgentSpeaking else { return }
             missionTranscriber.resumeSegmentDelivery()
-            recordingStatusMessage = "Listening continuously. Pause and I will calculate."
+            recordingStatusMessage = status == .running
+                ? "Loop running. Mic is active for steering. Pause to inject guidance."
+                : "Listening continuously. Pause to start x-maxx."
             return
         }
 
@@ -578,26 +578,28 @@ final class AppStore: ObservableObject {
                     initialText: currentMission,
                     onUpdate: { transcript in
                         Task { @MainActor in
-                            store.missionText = transcript
+                            if store.status != .running {
+                                store.missionText = transcript
+                            }
                         }
                     },
                     onFinal: { capture in
                         Task { @MainActor in
-                            await store.processCapturedMission(capture)
+                            await store.handleCapturedSpeech(capture)
                         }
                     }
                 )
 
                 isRecordingMission = true
                 if status == .running {
-                    missionTranscriber.suspendSegmentDelivery()
-                    recordingStatusMessage = "Processing mission. Mic stays live."
+                    missionTranscriber.resumeSegmentDelivery()
+                    recordingStatusMessage = "Loop running. Mic is active for steering. Pause to inject guidance."
                 } else if isAgentSpeaking {
                     missionTranscriber.suspendSegmentDelivery()
                     recordingStatusMessage = "Speaking response. Mic stays live while self-voice is ignored."
                 } else {
                     missionTranscriber.resumeSegmentDelivery()
-                    recordingStatusMessage = "Listening continuously. Pause and I will calculate."
+                    recordingStatusMessage = "Listening continuously. Pause to start x-maxx."
                 }
             } catch {
                 isRecordingMission = false
@@ -611,14 +613,24 @@ final class AppStore: ObservableObject {
         listeningRestartTask?.cancel()
         missionTranscriber.stop()
         isRecordingMission = false
+        liveVoiceLoopContext = ""
         let trimmedMission = missionText.trimmingCharacters(in: .whitespacesAndNewlines)
         recordingStatusMessage = trimmedMission.isEmpty ? "Ready to capture the mission from audio." : "Mission captured from audio."
     }
 
     private func pauseMissionRecordingForProcessing() {
-        missionTranscriber.suspendSegmentDelivery()
         if voiceLoopEnabled {
-            recordingStatusMessage = "Processing mission. Mic stays live."
+            recordingStatusMessage = status == .running
+                ? "Loop running. Mic is active for steering. Pause to inject guidance."
+                : "Processing mission. Mic is active."
+        }
+    }
+
+    private func handleCapturedSpeech(_ capture: MissionCapture) async {
+        if status == .running || loopTask != nil {
+            await processOperatorSteering(capture)
+        } else {
+            await processCapturedMission(capture)
         }
     }
 
@@ -630,16 +642,54 @@ final class AppStore: ObservableObject {
         }
 
         pauseMissionRecordingForProcessing()
+        let resolvedCapture = await resolveVoiceCapture(capture, analysisPurpose: "mission")
+        missionText = resolvedCapture.text
+        recordingStatusMessage = "Mission captured. Running x-maxx."
+        runOODALoop(
+            preserveVoiceLoop: true,
+            supplementalEnvironment: resolvedCapture.voiceContext
+        )
+    }
 
-        var resolvedMission = trimmedTranscript
-        var resolvedVoiceContext = ""
+    private func processOperatorSteering(_ capture: MissionCapture) async {
+        let trimmedTranscript = capture.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTranscript.isEmpty else {
+            capture.deleteTemporaryAudioFileIfNeeded()
+            return
+        }
 
+        let resolvedCapture = await resolveVoiceCapture(capture, analysisPurpose: "steering")
+        let normalized = resolvedCapture.text.lowercased()
+
+        if normalized.contains("stop loop") || normalized.contains("cancel loop") || normalized.contains("halt loop") {
+            recordingStatusMessage = "Voice command received. Stopping the loop."
+            stopLoop()
+            return
+        }
+
+        operatorFeedback = appendOperatorFeedbackEntry(resolvedCapture.text)
+        if !resolvedCapture.voiceContext.isEmpty {
+            liveVoiceLoopContext = resolvedCapture.voiceContext
+        }
+        persistWorkspaceDraft()
+        recordingStatusMessage = "Steering captured. The next iteration will use it."
+    }
+
+    private func resolveVoiceCapture(
+        _ capture: MissionCapture,
+        analysisPurpose: String
+    ) async -> (text: String, voiceContext: String) {
         defer {
             capture.deleteTemporaryAudioFileIfNeeded()
         }
 
+        var resolvedText = capture.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+        var resolvedVoiceContext = ""
+
         if !pyannoteAPIKey.isEmpty, let audioFileURL = capture.audioFileURL {
-            recordingStatusMessage = "Mission captured. Analyzing speakers with pyannote."
+            recordingStatusMessage = analysisPurpose == "mission"
+                ? "Mission captured. Analyzing speakers with pyannote."
+                : "Steering captured. Analyzing speakers with pyannote."
 
             do {
                 let analysis = try await pyannoteClient.analyzeUtterance(
@@ -647,24 +697,40 @@ final class AppStore: ObservableObject {
                     apiKey: pyannoteAPIKey
                 )
                 if !analysis.missionTranscript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    resolvedMission = analysis.missionTranscript
+                    resolvedText = analysis.missionTranscript
                 }
                 resolvedVoiceContext = analysis.loopContext
                 voiceAnalysisSummary = analysis.summary
             } catch {
                 voiceAnalysisSummary = "pyannote analysis unavailable. Using local speech transcript."
-                recordingStatusMessage = "pyannote unavailable. Running x-maxx with local transcript."
+                recordingStatusMessage = "pyannote unavailable. Using the local speech transcript."
             }
         } else {
             voiceAnalysisSummary = pyannoteAPIKey.isEmpty ? "" : "Local speech transcript captured."
         }
 
-        missionText = resolvedMission
-        recordingStatusMessage = "Mission captured. Running x-maxx."
-        runOODALoop(
-            preserveVoiceLoop: true,
-            supplementalEnvironment: resolvedVoiceContext
+        return (
+            text: resolvedText,
+            voiceContext: resolvedVoiceContext
         )
+    }
+
+    private func appendOperatorFeedbackEntry(_ entry: String) -> String {
+        let trimmedEntry = entry.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedEntry.isEmpty else { return operatorFeedback }
+
+        let formattedEntry = "Voice steer: \(trimmedEntry)"
+        let existingEntries = operatorFeedback
+            .components(separatedBy: "\n\n")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        if existingEntries.last == formattedEntry {
+            return operatorFeedback
+        }
+
+        return Array((existingEntries + [formattedEntry]).suffix(6))
+            .joined(separator: "\n\n")
     }
 
     private func runLoopSession(
@@ -681,13 +747,19 @@ final class AppStore: ObservableObject {
             currentIteration = iteration
             status = .running
             statusMessage = "Iteration \(iteration) of \(limit): observing and planning."
+            let liveEnvironment = composeEnvironment(
+                base: environment,
+                supplemental: liveVoiceLoopContext
+            )
+            let liveOperatorFeedback = self.operatorFeedback
+                .trimmingCharacters(in: .whitespacesAndNewlines)
 
             let result = try await client.generateOODALoop(
                 apiKey: chatGPTAPIKey,
                 profileName: profileName,
                 mission: mission,
-                environment: environment,
-                operatorFeedback: operatorFeedback,
+                environment: liveEnvironment,
+                operatorFeedback: liveOperatorFeedback.isEmpty ? operatorFeedback : liveOperatorFeedback,
                 iteration: iteration,
                 maxIterations: limit,
                 priorCycles: history
@@ -697,7 +769,7 @@ final class AppStore: ObservableObject {
                 iteration: iteration,
                 createdAt: .now,
                 mission: mission,
-                environment: environment,
+                environment: liveEnvironment,
                 summary: result.summary,
                 model: result.model,
                 progress: result.progress,
@@ -769,7 +841,7 @@ final class AppStore: ObservableObject {
 
             if self.isRecordingMission {
                 self.missionTranscriber.resumeSegmentDelivery()
-                self.recordingStatusMessage = "Listening continuously. Pause and I will calculate."
+                self.recordingStatusMessage = "Listening continuously. Pause to start x-maxx."
             } else {
                 self.beginMissionListening()
             }
@@ -800,6 +872,7 @@ final class AppStore: ObservableObject {
 
         listeningRestartTask?.cancel()
         pauseMissionRecordingForProcessing()
+        missionTranscriber.suspendSegmentDelivery()
         isAgentSpeaking = true
 
         speakingTask?.cancel()
@@ -821,14 +894,15 @@ final class AppStore: ObservableObject {
 
             guard self.voiceLoopEnabled else { return }
 
+            self.missionTranscriber.resumeSegmentDelivery(
+                afterNanoseconds: 250_000_000,
+                suppressingPlaybackEchoFrom: spokenText
+            )
+
             if self.status == .running {
-                self.recordingStatusMessage = "Processing mission. Mic stays live."
+                self.recordingStatusMessage = "Loop running. Mic is active for steering. Pause to inject guidance."
             } else {
-                self.missionTranscriber.resumeSegmentDelivery(
-                    afterNanoseconds: 250_000_000,
-                    suppressingPlaybackEchoFrom: spokenText
-                )
-                self.recordingStatusMessage = "Listening continuously. Pause and I will calculate."
+                self.recordingStatusMessage = "Listening continuously. Pause to start x-maxx."
             }
         }
     }
@@ -1014,6 +1088,9 @@ private struct OpenAIClient {
         Use grounded reasoning. If information is missing, say that directly instead of inventing facts.
         Goal: maximize progress toward objective x, where x is the user's mission.
         The loop should continue until the objective is met, the agent is blocked, or the iteration budget is exhausted.
+        Treat operator feedback as live steering from the human. If it changes priorities, constraints, or desired direction, adapt immediately in the next iteration instead of continuing the old plan.
+        Keep the loop steerable: prefer small, reversible next moves over long speculative plans when live steering is present.
+        If the mission or latest steering is ambiguous, say exactly what clarification is needed.
 
         Required JSON shape:
         {
@@ -1067,7 +1144,7 @@ private struct OpenAIClient {
         Prior cycles:
         \(historySummary)
 
-        Produce the next OODA loop for this app. This is a macOS desktop copilot dashboard. It can plan through ChatGPT, but it does not yet have live screen capture or a real automation executor. Make the output useful, specific, and honest about gaps. Push the loop forward instead of repeating generic advice.
+        Produce the next OODA loop for this app. This is a macOS desktop copilot dashboard. It can plan through ChatGPT, but it does not yet have live screen capture or a real automation executor. Make the output useful, specific, and honest about gaps. Push the loop forward instead of repeating generic advice. Assume operator feedback may have arrived while the loop was already running, and give it priority over stale earlier plans.
         """
 
         var request = URLRequest(url: url)
