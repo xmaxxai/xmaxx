@@ -153,7 +153,7 @@ private struct HeaderBar: View {
                 .font(.system(size: 38, weight: .black, design: .rounded))
                 .foregroundStyle(.white)
 
-            Text("Observe what is happening. Orient to what it means. Decide. Act. Guide the distance to goal.")
+            Text("\(store.activeDecisionProfile.title): \(store.activeDecisionProfile.subtitle)")
                 .font(.system(size: 15, weight: .semibold, design: .rounded))
                 .foregroundStyle(Color.white.opacity(0.62))
         }
@@ -242,6 +242,10 @@ private struct ControlDeckPanel: View {
 
                 MetricStrip(store: store)
 
+                fieldBlock(title: "Decision Model") {
+                    DecisionModelSelector(store: store)
+                }
+
                 fieldBlock(title: "Automation") {
                     VStack(alignment: .leading, spacing: 10) {
                         HStack(spacing: 8) {
@@ -279,36 +283,7 @@ private struct ControlDeckPanel: View {
 
                 fieldBlock(title: "Mission") {
                     VStack(alignment: .leading, spacing: 10) {
-                        HStack(spacing: 10) {
-                            Button {
-                                store.toggleMissionRecording()
-                            } label: {
-                                VStack(spacing: 8) {
-                                    Image(systemName: "mic.fill")
-                                        .font(.system(size: 28, weight: .bold))
-                                    Text(store.voiceLoopEnabled ? "Stop" : "Start")
-                                        .font(.system(size: 12, weight: .bold, design: .rounded))
-                                }
-                                .foregroundStyle(store.isRecordingMission ? Color(red: 0.99, green: 0.48, blue: 0.36) : Color.white)
-                                .frame(width: 94, height: 94)
-                                .background(
-                                    Circle()
-                                        .fill(Color.white.opacity(0.07))
-                                )
-                                .overlay {
-                                    Circle()
-                                        .stroke(Color.white.opacity(0.10), lineWidth: 1)
-                                }
-                            }
-                            .buttonStyle(.plain)
-
-                            Text(store.recordingStatusMessage)
-                                .font(.system(size: 12, weight: .medium, design: .rounded))
-                                .foregroundStyle(Color.white.opacity(0.52))
-                                .multilineTextAlignment(.leading)
-                                .fixedSize(horizontal: false, vertical: true)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
+                        VoiceLoopControl(store: store)
 
                         if !store.voiceAnalysisSummary.isEmpty {
                             Text(store.voiceAnalysisSummary)
@@ -319,7 +294,7 @@ private struct ControlDeckPanel: View {
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
 
-                        Text("Turn on the microphone and keep talking naturally. The first utterance starts the mission, and while the loop runs you can keep speaking short steering updates; each pause gets folded into the next guided cycle.")
+                        Text("One control now handles both listening and loop execution. If the mission text is already filled in, starting here runs it immediately and keeps the mic live for steering. If not, it listens first and starts after your first spoken pause.")
                             .font(.system(size: 11, weight: .medium, design: .rounded))
                             .foregroundStyle(Color.white.opacity(0.42))
                             .multilineTextAlignment(.leading)
@@ -357,35 +332,6 @@ private struct ControlDeckPanel: View {
                 }
 
                 VStack(alignment: .leading, spacing: 10) {
-                    Button {
-                        store.runNavigationLoop()
-                    } label: {
-                        HStack {
-                            Image(systemName: store.status == .running ? "bolt.horizontal.circle.fill" : "play.circle.fill")
-                            Text(store.status == .running ? "Running Guided Loop" : "Run Guided Loop")
-                        }
-                        .font(.system(size: 16, weight: .bold, design: .rounded))
-                        .foregroundStyle(Color.black.opacity(0.86))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(
-                            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                .fill(
-                                    LinearGradient(
-                                        colors: [
-                                            Color(red: 0.88, green: 0.94, blue: 0.96),
-                                            Color(red: 0.53, green: 0.92, blue: 0.82)
-                                        ],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(!store.canRunLoop)
-                    .opacity(store.canRunLoop ? 1 : 0.55)
-
                     if store.awaitingActionConfirmation {
                         Button("Approve Actions") {
                             store.confirmPendingActions()
@@ -398,15 +344,6 @@ private struct ControlDeckPanel: View {
                             .font(.system(size: 12, weight: .medium, design: .rounded))
                             .foregroundStyle(Color.white.opacity(0.54))
                             .fixedSize(horizontal: false, vertical: true)
-                    }
-
-                    if store.status == .running || store.awaitingActionConfirmation {
-                        Button("Stop Loop") {
-                            store.stopLoop()
-                        }
-                        .font(.system(size: 13, weight: .bold, design: .rounded))
-                        .foregroundStyle(Color.white.opacity(0.84))
-                        .buttonStyle(.plain)
                     }
 
                     if store.chatGPTAPIKey.isEmpty {
@@ -444,8 +381,8 @@ private struct MissionBoard: View {
                 VStack(alignment: .leading, spacing: 18) {
                     HStack {
                         VStack(alignment: .leading, spacing: 8) {
-                            sectionLabel("Guided Loop")
-                            Text("Observe. Orient. Decide. Act. Guide.")
+                            sectionLabel("Decision Model")
+                            Text(store.activeDecisionProfile.stageHeadline)
                                 .font(.system(size: 30, weight: .bold, design: .rounded))
                                 .foregroundStyle(.white)
                         }
@@ -453,7 +390,7 @@ private struct MissionBoard: View {
                         Spacer()
 
                         VStack(alignment: .trailing, spacing: 8) {
-                            Text("Live planning via ChatGPT")
+                            Text(store.activeDecisionProfile.title)
                                 .font(.system(size: 13, weight: .bold, design: .rounded))
                                 .foregroundStyle(Color.white.opacity(0.65))
 
@@ -533,7 +470,7 @@ private struct MissionBoard: View {
                     ActionGraphScene(snapshot: store.actionGraphSnapshot)
                         .frame(minHeight: 320)
 
-                    Text("The graph updates as the loop changes, linking Observe, Orient, Decide, Act, and Guide to the actions that are queued, running, blocked, or done.")
+                    Text("The graph updates as the loop changes, linking \(store.activeDecisionProfile.stageHeadline) to the actions and CLI suggestions that are queued, running, blocked, or done.")
                         .font(.system(size: 12, weight: .medium, design: .rounded))
                         .foregroundStyle(Color.white.opacity(0.48))
                         .fixedSize(horizontal: false, vertical: true)
@@ -836,11 +773,11 @@ private struct NavigationCard: View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 7) {
-                    Text(section.phase.title.uppercased())
+                    Text(section.stageTitle.uppercased())
                         .font(.system(size: 11, weight: .black, design: .rounded))
                         .foregroundStyle(accent.opacity(0.9))
 
-                    Text(section.phase.shortLabel)
+                    Text(section.stagePrompt)
                         .font(.system(size: 12, weight: .bold, design: .rounded))
                         .foregroundStyle(Color.white.opacity(0.58))
 
@@ -980,11 +917,28 @@ private struct ActionRow: View {
                         .fixedSize(horizontal: true, vertical: false)
                 }
 
-                Text("\(action.tool) -> \(action.target)")
-                    .font(.system(size: 12, weight: .bold, design: .rounded))
-                    .foregroundStyle(Color.white.opacity(0.50))
-                    .multilineTextAlignment(.leading)
-                    .fixedSize(horizontal: false, vertical: true)
+                if action.tool == "shell_command" {
+                    Text(action.target)
+                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(Color.white.opacity(0.78))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 8)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .fill(Color.black.opacity(0.22))
+                        )
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                        }
+                } else {
+                    Text("\(action.tool) -> \(action.target)")
+                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .foregroundStyle(Color.white.opacity(0.50))
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
 
                 if let x = action.x, let y = action.y {
                     Text(String(format: "Coordinates: %.1f, %.1f", x, y))
@@ -1107,6 +1061,7 @@ private struct MetricStrip: View {
         Group {
             metricCard(title: "Cycles", value: "\(store.cycles.count)")
             metricCard(title: "Progress", value: "\(Int(store.objectiveProgress * 100))%")
+            metricCard(title: "Model", value: store.activeDecisionProfile.title)
             metricCard(title: "Profile", value: store.profileName.isEmpty ? "Guest" : store.profileName)
         }
     }
@@ -1131,6 +1086,345 @@ private struct MetricStrip: View {
         .overlay {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .stroke(Color.white.opacity(0.08), lineWidth: 1)
+        }
+    }
+}
+
+private struct DecisionModelSelector: View {
+    @ObservedObject var store: AppStore
+
+    private let columns = [
+        GridItem(.flexible(), spacing: 10, alignment: .top),
+        GridItem(.flexible(), spacing: 10, alignment: .top)
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            LazyVGrid(columns: columns, spacing: 10) {
+                ForEach(DecisionModel.allCases) { model in
+                    Button {
+                        store.toggleDecisionModel(model)
+                    } label: {
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack(alignment: .top) {
+                                Text(model.capsuleTitle)
+                                    .font(.system(size: 11, weight: .black, design: .rounded))
+                                    .foregroundStyle(isSelected(model) ? Color.black.opacity(0.82) : accent(for: model))
+
+                                Spacer(minLength: 6)
+
+                                Image(systemName: isSelected(model) ? "checkmark.circle.fill" : "plus.circle")
+                                    .font(.system(size: 14, weight: .bold))
+                                    .foregroundStyle(isSelected(model) ? Color.black.opacity(0.82) : Color.white.opacity(0.44))
+                            }
+
+                            Text(model.title)
+                                .font(.system(size: 14, weight: .bold, design: .rounded))
+                                .foregroundStyle(.white)
+                                .fixedSize(horizontal: false, vertical: true)
+
+                            Text(model.summary)
+                                .font(.system(size: 11, weight: .medium, design: .rounded))
+                                .foregroundStyle(Color.white.opacity(0.62))
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .padding(14)
+                        .frame(maxWidth: .infinity, minHeight: 116, alignment: .topLeading)
+                        .background(background(for: model))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                .stroke(borderColor(for: model), lineWidth: 1)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            HStack(spacing: 8) {
+                Text(store.activeDecisionProfile.title)
+                    .font(.system(size: 12, weight: .black, design: .rounded))
+                    .foregroundStyle(.white)
+
+                Text(store.activeDecisionProfile.subtitle)
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundStyle(Color.white.opacity(0.54))
+                    .lineLimit(2)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(Color.white.opacity(0.04))
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
+            }
+        }
+    }
+
+    private func isSelected(_ model: DecisionModel) -> Bool {
+        store.selectedDecisionModels.contains(model)
+    }
+
+    private func accent(for model: DecisionModel) -> Color {
+        switch model {
+        case .ooda:
+            return Color(red: 0.35, green: 0.73, blue: 0.96)
+        case .recognitionPrimed:
+            return Color(red: 0.99, green: 0.48, blue: 0.36)
+        case .system1System2:
+            return Color(red: 0.98, green: 0.74, blue: 0.28)
+        case .bayesian:
+            return Color(red: 0.80, green: 0.88, blue: 0.43)
+        case .reinforcementLearning:
+            return Color(red: 0.53, green: 0.92, blue: 0.82)
+        case .predictiveProcessing:
+            return Color(red: 0.58, green: 0.70, blue: 0.98)
+        case .cynefin:
+            return Color(red: 0.92, green: 0.60, blue: 0.26)
+        }
+    }
+
+    private func background(for model: DecisionModel) -> some View {
+        RoundedRectangle(cornerRadius: 20, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: isSelected(model)
+                        ? [
+                            Color.white.opacity(0.88),
+                            accent(for: model).opacity(0.78)
+                        ]
+                        : [
+                            Color.white.opacity(0.05),
+                            accent(for: model).opacity(0.14)
+                        ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+    }
+
+    private func borderColor(for model: DecisionModel) -> Color {
+        isSelected(model) ? accent(for: model).opacity(0.82) : Color.white.opacity(0.10)
+    }
+}
+
+private struct VoiceLoopControl: View {
+    @ObservedObject var store: AppStore
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Button {
+                store.toggleGuidedVoiceLoop()
+            } label: {
+                HStack(spacing: 16) {
+                    ZStack {
+                        Circle()
+                            .fill(iconGradient)
+                            .frame(width: 62, height: 62)
+
+                        Image(systemName: buttonIcon)
+                            .font(.system(size: 22, weight: .black))
+                            .foregroundStyle(buttonIconForeground)
+                    }
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(buttonTitle)
+                            .font(.system(size: 17, weight: .black, design: .rounded))
+                            .foregroundStyle(.white)
+
+                        Text(buttonSubtitle)
+                            .font(.system(size: 12, weight: .medium, design: .rounded))
+                            .foregroundStyle(Color.white.opacity(0.64))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    Spacer(minLength: 0)
+
+                    Image(systemName: isActive ? "stop.circle.fill" : "arrow.right.circle.fill")
+                        .font(.system(size: 26, weight: .bold))
+                        .foregroundStyle(Color.white.opacity(0.92))
+                }
+                .padding(18)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(controlBackground)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .stroke(buttonAccent.opacity(0.42), lineWidth: 1)
+                }
+            }
+            .buttonStyle(.plain)
+
+            HStack(spacing: 8) {
+                controlBadge(
+                    title: "Mic",
+                    value: micStatusLabel,
+                    accent: isActive ? buttonAccent : Color.white.opacity(0.32)
+                )
+
+                controlBadge(
+                    title: "Loop",
+                    value: loopStatusLabel,
+                    accent: loopAccent
+                )
+            }
+
+            Text(store.recordingStatusMessage)
+                .font(.system(size: 12, weight: .medium, design: .rounded))
+                .foregroundStyle(Color.white.opacity(0.52))
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private var hasMission: Bool {
+        !store.missionText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var isRunning: Bool {
+        store.isGuidedLoopRunning
+    }
+
+    private var isActive: Bool {
+        store.isVoiceLoopActive
+    }
+
+    private var buttonTitle: String {
+        if isActive {
+            return "Stop Voice Loop"
+        }
+
+        return hasMission ? "Start Guided Voice Loop" : "Start Voice Loop"
+    }
+
+    private var buttonSubtitle: String {
+        if isRunning {
+            return "The loop is live and the mic stays available for steering."
+        }
+
+        if isActive {
+            return "The mic is armed and waiting for your next spoken pause."
+        }
+
+        if hasMission {
+            return "Run the current mission now and keep listening for voice steering."
+        }
+
+        return "Start listening first, speak the mission, then pause to kick off the loop."
+    }
+
+    private var buttonIcon: String {
+        if isActive {
+            return "stop.fill"
+        }
+
+        return hasMission ? "waveform.and.mic" : "mic.fill"
+    }
+
+    private var buttonAccent: Color {
+        if isActive {
+            return Color(red: 0.99, green: 0.48, blue: 0.36)
+        }
+
+        return hasMission
+            ? Color(red: 0.53, green: 0.92, blue: 0.82)
+            : Color(red: 0.35, green: 0.73, blue: 0.96)
+    }
+
+    private var buttonIconForeground: Color {
+        isActive ? .white : Color.black.opacity(0.82)
+    }
+
+    private var iconGradient: LinearGradient {
+        LinearGradient(
+            colors: isActive
+                ? [
+                    buttonAccent.opacity(0.95),
+                    Color(red: 0.80, green: 0.24, blue: 0.20)
+                ]
+                : [
+                    Color.white.opacity(0.92),
+                    buttonAccent.opacity(0.95)
+                ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    private var controlBackground: some View {
+        RoundedRectangle(cornerRadius: 24, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(0.08),
+                        buttonAccent.opacity(0.18)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+    }
+
+    private var micStatusLabel: String {
+        if store.isRecordingMission {
+            return "Live"
+        }
+
+        if isActive {
+            return "Arming"
+        }
+
+        return "Off"
+    }
+
+    private var loopStatusLabel: String {
+        if store.awaitingActionConfirmation {
+            return "Approval"
+        }
+
+        if isRunning {
+            return "Running"
+        }
+
+        return hasMission ? "Ready" : "Waiting"
+    }
+
+    private var loopAccent: Color {
+        if store.awaitingActionConfirmation {
+            return Color(red: 0.98, green: 0.74, blue: 0.28)
+        }
+
+        if isRunning {
+            return Color(red: 0.53, green: 0.92, blue: 0.82)
+        }
+
+        return hasMission
+            ? Color(red: 0.35, green: 0.73, blue: 0.96)
+            : Color.white.opacity(0.28)
+    }
+
+    private func controlBadge(title: String, value: String, accent: Color) -> some View {
+        HStack(spacing: 8) {
+            Text(title)
+                .font(.system(size: 11, weight: .black, design: .rounded))
+                .foregroundStyle(Color.white.opacity(0.48))
+
+            Text(value)
+                .font(.system(size: 11, weight: .bold, design: .rounded))
+                .foregroundStyle(.white)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(
+            Capsule(style: .continuous)
+                .fill(accent.opacity(0.16))
+        )
+        .overlay {
+            Capsule(style: .continuous)
+                .stroke(accent.opacity(0.34), lineWidth: 1)
         }
     }
 }

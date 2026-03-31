@@ -56,6 +56,227 @@ enum NavigationPhase: String, CaseIterable, Hashable, Codable, Identifiable {
     }
 }
 
+enum DecisionModel: String, CaseIterable, Codable, Hashable, Identifiable {
+    case ooda
+    case recognitionPrimed = "recognition_primed"
+    case system1System2 = "system_1_system_2"
+    case bayesian
+    case reinforcementLearning = "reinforcement_learning"
+    case predictiveProcessing = "predictive_processing"
+    case cynefin
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .ooda:
+            return "OODA"
+        case .recognitionPrimed:
+            return "Recognition-Primed"
+        case .system1System2:
+            return "System 1 / System 2"
+        case .bayesian:
+            return "Bayesian Updating"
+        case .reinforcementLearning:
+            return "Reinforcement Learning"
+        case .predictiveProcessing:
+            return "Predictive Processing"
+        case .cynefin:
+            return "Cynefin"
+        }
+    }
+
+    var capsuleTitle: String {
+        switch self {
+        case .ooda:
+            return "OODA"
+        case .recognitionPrimed:
+            return "RPD"
+        case .system1System2:
+            return "Sys1+2"
+        case .bayesian:
+            return "Bayes"
+        case .reinforcementLearning:
+            return "RL"
+        case .predictiveProcessing:
+            return "Predictive"
+        case .cynefin:
+            return "Cynefin"
+        }
+    }
+
+    var summary: String {
+        switch self {
+        case .ooda:
+            return "Continuous observe, orient, decide, act, and guide loop."
+        case .recognitionPrimed:
+            return "Pattern-match quickly and commit to the first workable move."
+        case .system1System2:
+            return "Balance fast intuition against slow deliberate reasoning."
+        case .bayesian:
+            return "Update beliefs explicitly as new evidence arrives."
+        case .reinforcementLearning:
+            return "Optimize behavior through action, reward, and policy updates."
+        case .predictiveProcessing:
+            return "Predict first, then use error signals to recalibrate."
+        case .cynefin:
+            return "Choose the decision style that fits the reality domain."
+        }
+    }
+
+    var promptDescription: String {
+        switch self {
+        case .ooda:
+            return "Use an OODA-style control loop: observe the environment, orient to meaning, decide the next move, act, and guide the next cycle based on what changed."
+        case .recognitionPrimed:
+            return "Use a recognition-primed style: match the situation to known patterns, mentally simulate the first workable response, and commit quickly instead of comparing many options."
+        case .system1System2:
+            return "Use a System 1 / System 2 split: surface the fast intuitive read, then explicitly state whether slower deliberate reasoning should confirm or override it."
+        case .bayesian:
+            return "Use Bayesian updating: name the prior belief, state the new evidence, update the posterior confidence, and act based on the updated odds."
+        case .reinforcementLearning:
+            return "Use a reinforcement learning lens: identify the current state, choose the action with the best expected reward, and explain what feedback signal should update the policy."
+        case .predictiveProcessing:
+            return "Use predictive processing: state the current prediction, identify prediction errors, update the internal model, and act to reduce uncertainty or mismatch."
+        case .cynefin:
+            return "Use the Cynefin framework: determine whether the situation is clear, complicated, complex, or chaotic, then pick the response mode that matches that domain."
+        }
+    }
+
+    var stages: [DecisionStageDescriptor] {
+        switch self {
+        case .ooda:
+            return [
+                DecisionStageDescriptor(phase: .observe, title: "Observe", shortLabel: "What is happening?", instruction: "Capture concrete signals, state, and operator intent before inferring anything."),
+                DecisionStageDescriptor(phase: .orient, title: "Orient", shortLabel: "What does it mean?", instruction: "Interpret the signals, constraints, and implications of the current situation."),
+                DecisionStageDescriptor(phase: .decide, title: "Decide", shortLabel: "What should I do?", instruction: "Pick the next move that best reduces distance to the mission."),
+                DecisionStageDescriptor(phase: .act, title: "Act", shortLabel: "What command executes it?", instruction: "Translate the chosen move into specific executable or operator-facing actions."),
+                DecisionStageDescriptor(phase: .guide, title: "Guide", shortLabel: "Did it reduce distance?", instruction: "Measure whether the move improved the situation and steer the next cycle.")
+            ]
+        case .recognitionPrimed:
+            return [
+                DecisionStageDescriptor(phase: .observe, title: "Cue Scan", shortLabel: "What cues match known patterns?", instruction: "Surface the cues, environmental markers, and operator intent that matter most for recognition."),
+                DecisionStageDescriptor(phase: .orient, title: "Pattern Match", shortLabel: "What known situation does this resemble?", instruction: "Name the most plausible situation pattern and why it fits the observed cues."),
+                DecisionStageDescriptor(phase: .decide, title: "Mental Sim", shortLabel: "Does the first move survive quick simulation?", instruction: "Mentally simulate the first workable response and reject it only if it obviously fails."),
+                DecisionStageDescriptor(phase: .act, title: "Commit", shortLabel: "What is the concrete move now?", instruction: "Commit to the best recognized action and express it concretely as an executable or operator-facing command."),
+                DecisionStageDescriptor(phase: .guide, title: "Expert Update", shortLabel: "Did recognition hold up?", instruction: "State whether the recognized pattern still fits after action and what needs reframing.")
+            ]
+        case .system1System2:
+            return [
+                DecisionStageDescriptor(phase: .observe, title: "Stimulus", shortLabel: "What is the immediate signal?", instruction: "Capture the fresh signal, operator input, and surrounding context without filtering it away."),
+                DecisionStageDescriptor(phase: .orient, title: "Fast Read", shortLabel: "What does intuition say first?", instruction: "State the fast automatic interpretation, including any emotional or heuristic pull."),
+                DecisionStageDescriptor(phase: .decide, title: "Deliberate Check", shortLabel: "Should slower reasoning override it?", instruction: "Run the slower explicit check and state whether it confirms or overrides the fast read."),
+                DecisionStageDescriptor(phase: .act, title: "Act", shortLabel: "What command follows from that?", instruction: "Produce the concrete next action or CLI command that follows from the chosen reasoning mode."),
+                DecisionStageDescriptor(phase: .guide, title: "Audit", shortLabel: "What bias or drift showed up?", instruction: "Evaluate whether the outcome exposed bias, overreaction, or drift in either reasoning mode.")
+            ]
+        case .bayesian:
+            return [
+                DecisionStageDescriptor(phase: .observe, title: "Prior", shortLabel: "What do we currently believe?", instruction: "State the current working belief, hypothesis, or prior confidence before new evidence is processed."),
+                DecisionStageDescriptor(phase: .orient, title: "Evidence", shortLabel: "What evidence just arrived?", instruction: "Identify the new evidence and explain how reliable it is."),
+                DecisionStageDescriptor(phase: .decide, title: "Posterior", shortLabel: "What belief is strong enough to act on now?", instruction: "Update the belief state and make the posterior explicit enough to justify action."),
+                DecisionStageDescriptor(phase: .act, title: "Bet", shortLabel: "What action fits the updated odds?", instruction: "Choose the action or CLI command implied by the updated belief distribution."),
+                DecisionStageDescriptor(phase: .guide, title: "Recalibrate", shortLabel: "What should the next prior become?", instruction: "Use the result to inform the next prior and say what would change your belief again.")
+            ]
+        case .reinforcementLearning:
+            return [
+                DecisionStageDescriptor(phase: .observe, title: "State", shortLabel: "What state are we in?", instruction: "Describe the current state, local constraints, and what reward-relevant facts are visible."),
+                DecisionStageDescriptor(phase: .orient, title: "Policy", shortLabel: "What behavior looks promising here?", instruction: "State the current policy intuition or action pattern that seems likely to improve reward."),
+                DecisionStageDescriptor(phase: .decide, title: "Action Choice", shortLabel: "Which move maximizes expected reward now?", instruction: "Pick the best next action under the present policy and explain the reward logic."),
+                DecisionStageDescriptor(phase: .act, title: "Execute", shortLabel: "What command do we run?", instruction: "Translate the chosen action into an executable or operator-facing command."),
+                DecisionStageDescriptor(phase: .guide, title: "Reward Update", shortLabel: "What feedback should change the policy?", instruction: "Use the result as reward feedback and say how the policy should adapt next.")
+            ]
+        case .predictiveProcessing:
+            return [
+                DecisionStageDescriptor(phase: .observe, title: "Prediction", shortLabel: "What did we expect to see?", instruction: "State the current prediction or model expectation before reacting to the new evidence."),
+                DecisionStageDescriptor(phase: .orient, title: "Error Signal", shortLabel: "What mismatched the prediction?", instruction: "Highlight the prediction errors, anomalies, or surprises that matter."),
+                DecisionStageDescriptor(phase: .decide, title: "Inference", shortLabel: "What internal model best explains it?", instruction: "Update the internal model and state the inference that best explains the mismatch."),
+                DecisionStageDescriptor(phase: .act, title: "Active Inference", shortLabel: "What command reduces uncertainty or error?", instruction: "Choose the action that best reduces prediction error, uncertainty, or ambiguity."),
+                DecisionStageDescriptor(phase: .guide, title: "Calibration", shortLabel: "Did the model improve?", instruction: "State whether the action calibrated the model and what prediction changes next.")
+            ]
+        case .cynefin:
+            return [
+                DecisionStageDescriptor(phase: .observe, title: "Context", shortLabel: "What signals define the situation?", instruction: "Capture the current facts, volatility, and ambiguity that shape the problem space."),
+                DecisionStageDescriptor(phase: .orient, title: "Domain", shortLabel: "Is this clear, complicated, complex, or chaotic?", instruction: "Classify the situation into the Cynefin domain that best fits the evidence."),
+                DecisionStageDescriptor(phase: .decide, title: "Response Mode", shortLabel: "What decision style fits this domain?", instruction: "Choose the response mode that fits the domain instead of forcing one fixed style."),
+                DecisionStageDescriptor(phase: .act, title: "Intervene", shortLabel: "What command fits this domain?", instruction: "Produce the action or CLI command appropriate to the chosen domain response mode."),
+                DecisionStageDescriptor(phase: .guide, title: "Sensemaking", shortLabel: "What did the intervention reveal?", instruction: "Use the result to confirm or revise the domain classification for the next cycle.")
+            ]
+        }
+    }
+}
+
+struct DecisionStageDescriptor: Hashable, Codable, Identifiable {
+    let phase: NavigationPhase
+    let title: String
+    let shortLabel: String
+    let instruction: String
+
+    var id: NavigationPhase { phase }
+}
+
+struct DecisionProfile: Hashable {
+    let selectedModels: [DecisionModel]
+    let title: String
+    let subtitle: String
+    let summary: String
+    let stages: [DecisionStageDescriptor]
+    let promptContext: String
+
+    var stageHeadline: String {
+        stages.map(\.title).joined(separator: " / ")
+    }
+
+    var selectedModelLine: String {
+        selectedModels.map(\.title).joined(separator: " + ")
+    }
+
+    func stage(for phase: NavigationPhase) -> DecisionStageDescriptor {
+        stages.first(where: { $0.phase == phase })
+            ?? DecisionStageDescriptor(
+                phase: phase,
+                title: phase.title,
+                shortLabel: phase.shortLabel,
+                instruction: "Explain this stage clearly and concretely."
+            )
+    }
+
+    static func make(from selectedModels: [DecisionModel]) -> DecisionProfile {
+        let resolvedModels = DecisionModel.allCases.filter { selectedModels.contains($0) }
+        let models = resolvedModels.isEmpty ? [.ooda] : resolvedModels
+
+        if models.count == 1, let model = models.first {
+            return DecisionProfile(
+                selectedModels: models,
+                title: model.title,
+                subtitle: model.summary,
+                summary: "Active model: \(model.title).",
+                stages: model.stages,
+                promptContext: model.promptDescription
+            )
+        }
+
+        let combinedDescriptions = models.map { "- \($0.title): \($0.promptDescription)" }.joined(separator: "\n")
+        return DecisionProfile(
+            selectedModels: models,
+            title: "Synthesis",
+            subtitle: models.map(\.capsuleTitle).joined(separator: " + "),
+            summary: "Blend the selected models into one steerable action surface.",
+            stages: [
+                DecisionStageDescriptor(phase: .observe, title: "Signal Intake", shortLabel: "What signals, cues, and priors matter?", instruction: "Combine observation, cues, priors, and expectation signals before overcommitting to a frame."),
+                DecisionStageDescriptor(phase: .orient, title: "Frame", shortLabel: "What pattern, domain, or error frame fits best?", instruction: "Blend pattern recognition, domain selection, evidence evaluation, and prediction-error framing into one coherent interpretation."),
+                DecisionStageDescriptor(phase: .decide, title: "Commit", shortLabel: "What move survives both intuition and scrutiny?", instruction: "Pick the move that still holds after combining fast intuition, deliberate checks, and updated belief state."),
+                DecisionStageDescriptor(phase: .act, title: "Command", shortLabel: "What exact action or CLI command should run now?", instruction: "Translate the chosen move into a concrete actionable command, tool call, or operator instruction."),
+                DecisionStageDescriptor(phase: .guide, title: "Update", shortLabel: "How should the model change after the result?", instruction: "Use the outcome to update priors, reward expectations, domain classification, and the next frame.")
+            ],
+            promptContext: """
+            Blend these decision models in one run:
+            \(combinedDescriptions)
+            Use the five semantic stages below as the synthesis surface. Keep the output concrete and action-oriented even when the models pull in different directions.
+            """
+        )
+    }
+}
+
 enum ActionStatus: String, Codable, Hashable {
     case queued
     case ready
@@ -121,6 +342,8 @@ enum AudioDialogueMode: String, CaseIterable, Hashable, Identifiable {
 
 struct NavigationSection: Identifiable, Hashable {
     let phase: NavigationPhase
+    var stageTitle: String
+    var stagePrompt: String
     var headline: String
     var narrative: String
     var bullets: [String]
@@ -191,6 +414,7 @@ final class AppStore: ObservableObject {
     @Published var pyannoteAPIKey: String
     @Published var audioResponsesEnabled: Bool
     @Published var audioDialogueMode: AudioDialogueMode
+    @Published var selectedDecisionModels: [DecisionModel]
     @Published var missionText: String
     @Published var environmentText: String
     @Published var isRecordingMission: Bool
@@ -228,6 +452,7 @@ final class AppStore: ObservableObject {
     private let pyannoteAPIKeyKey = "pyannoteAPIKey"
     private let audioResponsesEnabledKey = "audioResponsesEnabled"
     private let audioDialogueModeKey = "audioDialogueMode"
+    private let selectedDecisionModelsKey = "selectedDecisionModels"
     private let missionTextKey = "missionText"
     private let environmentTextKey = "environmentText"
     private let operatorFeedbackKey = "operatorFeedback"
@@ -277,6 +502,9 @@ final class AppStore: ObservableObject {
         var storedPyannoteAPIKey = keychain.read(account: pyannoteAPIKeyKey) ?? ""
         let storedAudioResponsesEnabled = userDefaults.object(forKey: audioResponsesEnabledKey) as? Bool ?? false
         let storedAudioDialogueMode = AudioDialogueMode(rawValue: userDefaults.string(forKey: audioDialogueModeKey) ?? "") ?? .external
+        let storedDecisionModels = (userDefaults.stringArray(forKey: selectedDecisionModelsKey) ?? [])
+            .compactMap(DecisionModel.init(rawValue:))
+        let resolvedDecisionModels = storedDecisionModels.isEmpty ? [DecisionModel.ooda] : DecisionModel.allCases.filter { storedDecisionModels.contains($0) }
 
         if storedAPIKey.isEmpty, let legacyAPIKey = userDefaults.string(forKey: chatGPTAPIKeyKey) {
             storedAPIKey = legacyAPIKey
@@ -304,6 +532,7 @@ final class AppStore: ObservableObject {
         pyannoteAPIKey = storedPyannoteAPIKey
         audioResponsesEnabled = storedAudioResponsesEnabled
         audioDialogueMode = storedAudioDialogueMode
+        selectedDecisionModels = resolvedDecisionModels
         operatorFeedback = storedOperatorFeedback
         isRecordingMission = false
         voiceLoopEnabled = storedVoiceLoopEnabled
@@ -320,8 +549,9 @@ final class AppStore: ObservableObject {
         currentIteration = 0
         objectiveProgress = 0.18
 
-        let starterSections = Self.placeholderSections
-        let starterActions = Self.placeholderActions
+        let starterDecisionProfile = DecisionProfile.make(from: resolvedDecisionModels)
+        let starterSections = Self.placeholderSections(for: starterDecisionProfile)
+        let starterActions = Self.placeholderActions(for: starterDecisionProfile)
 
         sections = starterSections
         actionQueue = starterActions
@@ -331,7 +561,7 @@ final class AppStore: ObservableObject {
                 createdAt: .now,
                 mission: storedMissionText,
                 environment: storedEnvironmentText,
-                summary: "Initial shell configured. Ready to generate the first guided cycle with ChatGPT.",
+                summary: "Initial shell configured. Ready to generate the first \(starterDecisionProfile.title) cycle with ChatGPT.",
                 model: "Planning Shell",
                 progress: 0.18,
                 objectiveMet: false,
@@ -341,7 +571,7 @@ final class AppStore: ObservableObject {
                 actions: starterActions
             )
         ]
-        statusMessage = "Observe clearly, act deliberately, and guide the distance to goal."
+        statusMessage = "Ready to plan with \(starterDecisionProfile.selectedModelLine)."
         selectedCycleID = cycles.first?.id
         refreshAutomationStatusMessage()
     }
@@ -352,6 +582,18 @@ final class AppStore: ObservableObject {
 
     var canRunLoop: Bool {
         !missionText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && status != .running && loopTask == nil && !awaitingActionConfirmation
+    }
+
+    var activeDecisionProfile: DecisionProfile {
+        DecisionProfile.make(from: selectedDecisionModels)
+    }
+
+    var isGuidedLoopRunning: Bool {
+        status == .running || loopTask != nil || awaitingActionConfirmation
+    }
+
+    var isVoiceLoopActive: Bool {
+        voiceLoopEnabled || isGuidedLoopRunning
     }
 
     var actionGraphSnapshot: ActionGraphSnapshot {
@@ -366,8 +608,8 @@ final class AppStore: ObservableObject {
         let phaseNodes = sections.map { section in
             ActionGraphNode(
                 id: "phase-\(section.phase.rawValue)",
-                title: section.phase.title,
-                subtitle: section.headline,
+                title: section.stageTitle,
+                subtitle: section.headline.isEmpty ? section.stagePrompt : section.headline,
                 kind: .phase(section.phase),
                 emphasis: max(section.confidence, 0.2)
             )
@@ -496,9 +738,11 @@ final class AppStore: ObservableObject {
             return
         }
 
-        voiceLoopEnabled = true
-        persistWorkspaceDraft()
-        beginMissionListening()
+        status = .idle
+        statusMessage = "Ready. Start the \(activeDecisionProfile.title) voice loop when you want to begin."
+        recordingStatusMessage = missionText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? "Ready. Start the voice loop to capture the mission."
+            : "Mission ready. Start the guided voice loop to run it with live steering."
     }
 
     func updateSettings(profileName: String, chatGPTAPIKey: String) {
@@ -551,12 +795,28 @@ final class AppStore: ObservableObject {
         }
     }
 
+    func toggleDecisionModel(_ model: DecisionModel) {
+        var updatedModels = selectedDecisionModels
+
+        if updatedModels.contains(model) {
+            guard updatedModels.count > 1 else { return }
+            updatedModels.removeAll { $0 == model }
+        } else {
+            updatedModels.append(model)
+        }
+
+        selectedDecisionModels = DecisionModel.allCases.filter { updatedModels.contains($0) }
+        persistWorkspaceDraft()
+        refreshDecisionModelScaffoldIfNeeded()
+    }
+
     func persistWorkspaceDraft() {
         userDefaults.set(missionText, forKey: missionTextKey)
         userDefaults.set(environmentText, forKey: environmentTextKey)
         userDefaults.set(operatorFeedback, forKey: operatorFeedbackKey)
         userDefaults.set(maxIterations, forKey: maxIterationsKey)
         userDefaults.set(voiceLoopEnabled, forKey: voiceLoopEnabledKey)
+        userDefaults.set(selectedDecisionModels.map(\.rawValue), forKey: selectedDecisionModelsKey)
     }
 
     func selectCycle(_ cycle: NavigationCycle) {
@@ -567,6 +827,43 @@ final class AppStore: ObservableObject {
         currentIteration = cycle.iteration
         status = cycle.objectiveMet ? .completed : (cycle.isBlocked ? .blocked : .ready)
         statusMessage = cycle.summary
+    }
+
+    private func refreshDecisionModelScaffoldIfNeeded() {
+        let profile = activeDecisionProfile
+
+        if status == .running || loopTask != nil {
+            statusMessage = "Decision model updated. The next cycle will use \(profile.selectedModelLine)."
+            return
+        }
+
+        statusMessage = "Decision model set to \(profile.selectedModelLine)."
+
+        guard currentIteration == 0 else { return }
+
+        let placeholderSections = Self.placeholderSections(for: profile)
+        let placeholderActions = Self.placeholderActions(for: profile)
+
+        sections = placeholderSections
+        actionQueue = placeholderActions
+
+        if let firstCycle = cycles.first, firstCycle.iteration == 0 {
+            cycles[0] = NavigationCycle(
+                iteration: 0,
+                createdAt: firstCycle.createdAt,
+                mission: missionText,
+                environment: environmentText,
+                summary: "Planning shell updated for \(profile.selectedModelLine).",
+                model: firstCycle.model,
+                progress: objectiveProgress,
+                objectiveMet: false,
+                isBlocked: false,
+                blocker: nil,
+                sections: placeholderSections,
+                actions: placeholderActions
+            )
+            selectedCycleID = cycles[0].id
+        }
     }
 
     func runNavigationLoop(
@@ -597,7 +894,7 @@ final class AppStore: ObservableObject {
         }
 
         status = .running
-        statusMessage = "Starting x-maxx navigator."
+        statusMessage = "Starting \(activeDecisionProfile.title) navigator."
         currentIteration = 0
         objectiveProgress = 0.18
 
@@ -673,12 +970,43 @@ final class AppStore: ObservableObject {
         }
     }
 
-    func toggleMissionRecording() {
-        if voiceLoopEnabled {
-            stopMissionRecording()
+    func toggleGuidedVoiceLoop() {
+        if isVoiceLoopActive {
+            stopGuidedVoiceLoop()
         } else {
-            startMissionRecording()
+            startGuidedVoiceLoop()
         }
+    }
+
+    func startGuidedVoiceLoop() {
+        startMissionRecording()
+
+        guard !chatGPTAPIKey.isEmpty else {
+            status = .awaitingAPIKey
+            statusMessage = "Add your ChatGPT API key in settings to start the guided loop."
+            return
+        }
+
+        guard !missionText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            status = .idle
+            statusMessage = "Listening for the first mission. Pause after speaking to start x-maxx."
+            return
+        }
+
+        guard !isGuidedLoopRunning else { return }
+        runNavigationLoop(preserveVoiceLoop: true)
+    }
+
+    func stopGuidedVoiceLoop() {
+        if isGuidedLoopRunning {
+            stopLoop()
+        }
+
+        stopMissionRecording()
+    }
+
+    func toggleMissionRecording() {
+        toggleGuidedVoiceLoop()
     }
 
     func startMissionRecording() {
@@ -758,7 +1086,9 @@ final class AppStore: ObservableObject {
         clearMissionDraftPreview()
         clearOperatorFeedbackDraftPreview()
         let trimmedMission = missionText.trimmingCharacters(in: .whitespacesAndNewlines)
-        recordingStatusMessage = trimmedMission.isEmpty ? "Ready to capture the mission from audio." : "Mission captured from audio."
+        recordingStatusMessage = trimmedMission.isEmpty
+            ? "Ready. Start the voice loop to capture the mission."
+            : "Voice loop stopped. The current mission stays loaded."
     }
 
     private func pauseMissionRecordingForProcessing() {
@@ -1041,6 +1371,7 @@ final class AppStore: ObservableObject {
             )
             let liveOperatorFeedback = self.operatorFeedback
                 .trimmingCharacters(in: .whitespacesAndNewlines)
+            let decisionProfile = self.activeDecisionProfile
 
             let result = try await client.generateNavigationLoop(
                 apiKey: chatGPTAPIKey,
@@ -1050,7 +1381,8 @@ final class AppStore: ObservableObject {
                 operatorFeedback: liveOperatorFeedback.isEmpty ? operatorFeedback : liveOperatorFeedback,
                 iteration: iteration,
                 maxIterations: limit,
-                priorCycles: history
+                priorCycles: history,
+                decisionProfile: decisionProfile
             )
 
             sections = result.sections
@@ -1349,100 +1681,122 @@ private extension NavigationCycle {
     }
 
     var internalDialogue: String {
-        let observeHeadline = sections.first(where: { $0.phase == .observe })?.headline ?? "Observation unavailable"
-        let guideHeadline = sections.first(where: { $0.phase == .guide })?.headline ?? "Guidance unavailable"
+        let openingStage = sections.first(where: { $0.phase == .observe })
+        let closingStage = sections.first(where: { $0.phase == .guide })
+        let openingTitle = openingStage?.stageTitle ?? "Opening"
+        let openingHeadline = openingStage?.headline ?? "Unavailable"
+        let closingTitle = closingStage?.stageTitle ?? "Closing"
+        let closingHeadline = closingStage?.headline ?? "Unavailable"
         let actionTools = actions.prefix(3).map { "\($0.tool) on \($0.target)" }.joined(separator: "; ")
 
         if actionTools.isEmpty {
-            return "Cycle \(iteration). Observe: \(observeHeadline). Guide: \(guideHeadline). No executable actions were attached."
+            return "Cycle \(iteration). \(openingTitle): \(openingHeadline). \(closingTitle): \(closingHeadline). No executable actions were attached."
         }
 
-        return "Cycle \(iteration). Observe: \(observeHeadline). Guide: \(guideHeadline). Planned actions: \(actionTools). Progress is \(Int(progress * 100)) percent."
+        return "Cycle \(iteration). \(openingTitle): \(openingHeadline). \(closingTitle): \(closingHeadline). Planned actions: \(actionTools). Progress is \(Int(progress * 100)) percent."
     }
 }
 
 extension AppStore {
-    static let placeholderSections: [NavigationSection] = [
-        NavigationSection(
-            phase: .observe,
-            headline: "Track the live machine state",
-            narrative: "Capture the current screen, focused app, recent events, and operator command before making any move.",
-            bullets: [
-                "Collect screen, window, and focused-app context.",
-                "Track the latest operator command and recent history.",
-                "Prefer facts over guesses."
-            ],
-            confidence: 0.35
-        ),
-        NavigationSection(
-            phase: .orient,
-            headline: "Interpret the situation",
-            narrative: "Translate raw signals into a grounded picture of what matters, what changed, and what constraints shape the next move.",
-            bullets: [
-                "Summarize goals, blockers, and relevant constraints.",
-                "Call out uncertainty and missing information explicitly.",
-                "Update the operating picture every cycle."
-            ],
-            confidence: 0.40
-        ),
-        NavigationSection(
-            phase: .decide,
-            headline: "Choose the next move",
-            narrative: "Select the smallest action sequence that reduces uncertainty or advances the mission without creating avoidable risk.",
-            bullets: [
-                "Prioritize reversible moves.",
-                "Keep the plan short and inspectable.",
-                "Escalate when the stakes are high."
-            ],
-            confidence: 0.38
-        ),
-        NavigationSection(
-            phase: .act,
-            headline: "Execute the chosen step",
-            narrative: "Run the selected action clearly and record the actual result instead of the intended one.",
-            bullets: [
-                "Execute the next action cleanly.",
-                "Log outputs, anomalies, and execution errors.",
-                "Preserve a clear before-and-after state."
-            ],
-            confidence: 0.36
-        ),
-        NavigationSection(
-            phase: .guide,
-            headline: "Measure distance to goal",
-            narrative: "Evaluate whether the last action reduced distance to the objective, increased certainty, or created drift that needs correction.",
-            bullets: [
-                "Ask whether the last move closed distance to the mission.",
-                "State what changed and what still remains.",
-                "Feed that guidance back into the next observation cycle."
-            ],
-            confidence: 0.34
-        )
-    ]
+    static func placeholderSections(for profile: DecisionProfile) -> [NavigationSection] {
+        profile.stages.map { stage in
+            let content: (headline: String, narrative: String, bullets: [String], confidence: Double)
 
-    static let placeholderActions: [ActionItem] = [
-        ActionItem(
-            title: "Add richer observation bridge",
-            tool: "Frontend",
-            target: "Observe stage",
-            rationale: "The loop starts with grounded state capture.",
-            status: .ready
-        ),
-        ActionItem(
-            title: "Connect ChatGPT guided loop synthesis",
-            tool: "Responses API",
-            target: "Guided cycle generation",
-            rationale: "Turn mission and environment text into a five-stage guided loop.",
-            status: .done
-        ),
-        ActionItem(
-            title: "Add guide-stage scoring",
-            tool: "Automation bridge",
-            target: "Guide stage",
-            rationale: "The loop should score whether actions actually reduced distance to the goal.",
-            status: .queued
-        )
-    ]
+            switch stage.phase {
+            case .observe:
+                content = (
+                    headline: "Capture the current machine state",
+                    narrative: "Pull in the latest screen context, operator intent, and system signals before overcommitting to a frame.",
+                    bullets: [
+                        "Read the current app, visible state, and recent changes.",
+                        "Treat operator steering as the freshest source of intent.",
+                        "Collect signal before story."
+                    ],
+                    confidence: 0.35
+                )
+            case .orient:
+                content = (
+                    headline: "Build a grounded frame",
+                    narrative: "Interpret the raw signals into a working picture of constraints, likely causes, and the decision style that fits.",
+                    bullets: [
+                        "Explain what matters and why.",
+                        "State uncertainty instead of hiding it.",
+                        "Choose the right mental frame for this cycle."
+                    ],
+                    confidence: 0.40
+                )
+            case .decide:
+                content = (
+                    headline: "Select the next move",
+                    narrative: "Choose the smallest move that best advances the mission under the active decision model.",
+                    bullets: [
+                        "Prefer inspectable moves over vague plans.",
+                        "Say why this move beats the nearby alternatives.",
+                        "Keep the decision steerable."
+                    ],
+                    confidence: 0.38
+                )
+            case .act:
+                content = (
+                    headline: "Translate intent into commands",
+                    narrative: "Convert the decision into executable actions, operator-facing CLI commands, or concrete automation steps.",
+                    bullets: [
+                        "Produce specific tool calls or shell commands.",
+                        "Make the next action runnable, not abstract.",
+                        "Log the actual result, not the intended one."
+                    ],
+                    confidence: 0.36
+                )
+            case .guide:
+                content = (
+                    headline: "Update the next cycle",
+                    narrative: "Measure whether the last move helped, then revise the next frame, belief, or control strategy accordingly.",
+                    bullets: [
+                        "State what changed after the action.",
+                        "Measure progress, error, or reward clearly.",
+                        "Feed the update into the next cycle."
+                    ],
+                    confidence: 0.34
+                )
+            }
+
+            return NavigationSection(
+                phase: stage.phase,
+                stageTitle: stage.title,
+                stagePrompt: stage.shortLabel,
+                headline: content.headline,
+                narrative: content.narrative,
+                bullets: content.bullets,
+                confidence: content.confidence
+            )
+        }
+    }
+
+    static func placeholderActions(for profile: DecisionProfile) -> [ActionItem] {
+        [
+            ActionItem(
+                title: "Synthesize \(profile.title) loop output",
+                tool: "Responses API",
+                target: profile.selectedModelLine,
+                rationale: "Turn mission and environment text into a decision-model-specific JSON cycle.",
+                status: .done
+            ),
+            ActionItem(
+                title: "Return operator-ready CLI suggestions",
+                tool: "shell_command",
+                target: "echo \"replace with the next concrete command\"",
+                rationale: "The act stage should be able to emit exact CLI commands even when the app is not executing them directly yet.",
+                status: .queued
+            ),
+            ActionItem(
+                title: "Measure update quality",
+                tool: "Automation bridge",
+                target: profile.stages.last?.title ?? "Update stage",
+                rationale: "The final stage should score whether the chosen model actually reduced distance to the goal.",
+                status: .queued
+            )
+        ]
+    }
 }
 
 private struct GeneratedLoop {
@@ -1468,11 +1822,16 @@ private struct OpenAIClient {
         operatorFeedback: String,
         iteration: Int,
         maxIterations: Int,
-        priorCycles: [NavigationCycle]
+        priorCycles: [NavigationCycle],
+        decisionProfile: DecisionProfile
     ) async throws -> GeneratedLoop {
         guard let url = URL(string: "https://api.openai.com/v1/responses") else {
             throw OpenAIClientError.invalidRequest
         }
+
+        let stagePrompt = decisionProfile.stages.map { stage in
+            "- \(stage.phase.rawValue) => \(stage.title): \(stage.shortLabel) \(stage.instruction)"
+        }.joined(separator: "\n")
 
         let systemPrompt = """
         You are driving an autonomous x-maxx guided loop for a desktop computer-use copilot.
@@ -1483,12 +1842,11 @@ private struct OpenAIClient {
         Treat operator feedback as live steering from the human. If it changes priorities, constraints, or desired direction, adapt immediately in the next iteration instead of continuing the old plan.
         Keep the loop steerable: prefer small, reversible next moves over long speculative plans when live steering is present.
         If the mission or latest steering is ambiguous, say exactly what clarification is needed.
-        Structure the reasoning around five stages:
-        1. Observe -> what is happening?
-        2. Orient -> what does it mean?
-        3. Decide -> what should I do?
-        4. Act -> do it.
-        5. Guide -> did this reduce distance to the goal?
+        Active decision model surface: \(decisionProfile.title).
+        Selected model lenses: \(decisionProfile.selectedModelLine).
+        \(decisionProfile.promptContext)
+        Structure the reasoning around these five internal JSON keys for this run:
+        \(stagePrompt)
 
         Required JSON shape:
         {
@@ -1512,6 +1870,7 @@ private struct OpenAIClient {
         Set "blocked" true only when the next step cannot proceed without missing tooling, permissions, or new human input.
         "progress" must be a number from 0.0 to 1.0 showing estimated distance closed toward the mission.
         Available executable tools right now are mouse_move, mouse_click, mouse_right_click, and find_screen_text.
+        You may also return shell_command as a planning-only action. When you use shell_command, put the exact CLI command string in target and prefer queued status because the current macOS build does not auto-execute shell commands yet.
         find_screen_text captures a fresh screenshot, OCRs visible text, and returns the center coordinates of matching visible text.
         When you choose mouse_move, mouse_click, or mouse_right_click, include absolute screen coordinates in x and y when they are known.
         If exact coordinates are not known but the click target is visible text on screen, you may omit x and y and set target to the exact text so the runtime can resolve coordinates from a fresh screenshot.
@@ -1619,11 +1978,11 @@ private struct OpenAIClient {
             isBlocked: loopResponse.blocked,
             blocker: loopResponse.blocker,
             sections: [
-                loopResponse.observe.makeSection(for: .observe),
-                loopResponse.orient.makeSection(for: .orient),
-                loopResponse.decide.makeSection(for: .decide),
-                loopResponse.act.makeSection(for: .act),
-                loopResponse.guide.makeSection(for: .guide)
+                loopResponse.observe.makeSection(using: decisionProfile.stage(for: .observe)),
+                loopResponse.orient.makeSection(using: decisionProfile.stage(for: .orient)),
+                loopResponse.decide.makeSection(using: decisionProfile.stage(for: .decide)),
+                loopResponse.act.makeSection(using: decisionProfile.stage(for: .act)),
+                loopResponse.guide.makeSection(using: decisionProfile.stage(for: .guide))
             ],
             actions: loopResponse.actions.map {
                 ActionItem(
@@ -2978,9 +3337,11 @@ private struct LoopSectionResponse: Decodable {
     let bullets: [String]
     let confidence: Double
 
-    func makeSection(for phase: NavigationPhase) -> NavigationSection {
+    func makeSection(using descriptor: DecisionStageDescriptor) -> NavigationSection {
         NavigationSection(
-            phase: phase,
+            phase: descriptor.phase,
+            stageTitle: descriptor.title,
+            stagePrompt: descriptor.shortLabel,
             headline: headline,
             narrative: narrative,
             bullets: bullets,
