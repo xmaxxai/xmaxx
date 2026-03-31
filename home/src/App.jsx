@@ -12,7 +12,7 @@ const heroStats = [
   {
     label: 'Local Response',
     value: '<10ms',
-    detail: 'Local-first compute keeps control loops immediate.',
+    detail: 'Local-first compute keeps agent loops immediate across connected systems.',
   },
   {
     label: 'Acoustic Output',
@@ -828,18 +828,19 @@ function App() {
       <main className="page-shell">
         <section className="hero-panel" id="overview">
           <div className="hero-copy">
-            <p className="eyebrow">Product Spec — XMAXX Core Unit</p>
-            <h1>This is not a consumer gadget. This is a system node.</h1>
+            <p className="eyebrow">Computer-Use Agent Hardware — XMAXX Core Unit</p>
+            <h1>AI agent hardware that can operate a computer.</h1>
             <p className="hero-copy__lede">
-              High-performance modular system hub designed for local-first
-              processing, automation, and optimization workflows. Built for
-              continuous operation with minimal noise and maximum efficiency.
+              XMAXX Core Unit packages a local-first computer-use agent into
+              dedicated hardware, giving one operator a physical system that
+              can see the interface, reason through tasks, and take action
+              across real software environments.
             </p>
 
             <div className="verb-strip" aria-label="System purpose">
-              <span>Run</span>
-              <span>Track</span>
-              <span>Optimize</span>
+              <span>See</span>
+              <span>Reason</span>
+              <span>Operate</span>
             </div>
 
             <AccessPanel
@@ -872,7 +873,7 @@ function App() {
             <div className="hero-visual__meta">
               <div>
                 <p className="section-kicker">Hardware Envelope</p>
-                <h2>Compact monolith. Fanless core. Local-first runtime.</h2>
+                <h2>Computer-use agent. Fanless core. Physical deployment.</h2>
               </div>
 
               <div className="hardware-highlights">
@@ -888,12 +889,14 @@ function App() {
           <p className="eyebrow">Positioning</p>
           <div className="positioning-band__copy">
             <p>
-              Purpose-built to run persistent workflows, track system state, and
-              optimize across domains without forcing cloud dependence.
+              XMAXX Core Unit is AI agent hardware built for computer
+              operation: a persistent box that can interpret an interface, move
+              through workflows, and execute actions with controlled autonomy.
             </p>
             <p>
-              XMAXX Core Unit behaves like an operational node: quiet, secure,
-              mesh-capable, and designed to stay present in the environment.
+              Instead of stitching together scripts and remote sessions, XMAXX
+              turns an agent that can operate a computer into a reliable
+              physical product.
             </p>
           </div>
         </section>
@@ -930,10 +933,10 @@ function App() {
 
         <section className="closing-panel">
           <p className="eyebrow">Operating Statement</p>
-          <h2>Local data priority. Secure boot. Continuous operation.</h2>
+          <h2>Computer-use AI, delivered as hardware.</h2>
           <p>
-            XMAXX Core Unit is designed to stay on, stay quiet, and stay in
-            control of the environment it serves.
+            XMAXX Core Unit is designed to stay on, stay quiet, and run
+            computer-level actions from a persistent local-first agent runtime.
           </p>
         </section>
       </main>
