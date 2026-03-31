@@ -877,8 +877,8 @@ function App() {
           <>
             <section className="hero-panel" id="overview">
               <div className="hero-copy">
-                <p className="eyebrow">Computer-Use Agent Hardware — XMAXX Core Unit</p>
-                <h1>The most clever computer ever made.</h1>
+                <p className="eyebrow">Autonomous Agent Device — XMAXX Core Unit</p>
+                <h1>The most clever device ever made.</h1>
                 <p className="hero-copy__lede">
                   Built to see, reason, and operate software for you. Join the
                   community. Own one today.
@@ -920,7 +920,7 @@ function App() {
                 <div className="hero-visual__meta">
                   <div>
                     <p className="section-kicker">Hardware Envelope</p>
-                    <h2>Computer-use agent. Fanless core. Physical deployment.</h2>
+                    <h2>Agent device. Fanless core. Physical deployment.</h2>
                   </div>
 
                   <div className="hardware-highlights">
@@ -936,14 +936,13 @@ function App() {
               <p className="eyebrow">Positioning</p>
               <div className="positioning-band__copy">
                 <p>
-                  XMAXX Core Unit is AI agent hardware built for computer
-                  operation: a persistent box that can interpret an interface, move
+                  XMAXX Core Unit is AI agent hardware built for interface-level
+                  operation: a persistent box that can interpret software, move
                   through workflows, and execute actions with controlled autonomy.
                 </p>
                 <p>
                   Instead of stitching together scripts and remote sessions, XMAXX
-                  turns an agent that can operate a computer into a reliable
-                  physical product.
+                  turns an agent runtime into a reliable physical product.
                 </p>
               </div>
             </section>
@@ -980,10 +979,10 @@ function App() {
 
             <section className="closing-panel">
               <p className="eyebrow">Operating Statement</p>
-              <h2>Computer-use AI, delivered as hardware.</h2>
+              <h2>Operational AI, delivered as hardware.</h2>
               <p>
                 XMAXX Core Unit is designed to stay on, stay quiet, and run
-                computer-level actions from a persistent local-first agent runtime.
+                task-level actions from a persistent local-first agent runtime.
               </p>
             </section>
           </>
