@@ -198,6 +198,8 @@ final class AppStore: ObservableObject {
     private var didTriggerPermissionProbes = false
     private var didAutoStart = false
     private var liveVoiceLoopContext = ""
+    private var missionDraftBaseText: String?
+    private var operatorFeedbackDraftBaseText: String?
     private let speechCoordinator = SpeechCoordinator()
     private let missionTranscriber = MissionTranscriber()
 
@@ -647,8 +649,10 @@ final class AppStore: ObservableObject {
                     initialText: currentMission,
                     onUpdate: { transcript in
                         Task { @MainActor in
-                            if store.status != .running {
-                                store.missionText = transcript
+                            if store.status == .running || store.loopTask != nil {
+                                store.updateOperatorFeedbackDraft(with: transcript)
+                            } else {
+                                store.updateMissionDraft(with: transcript)
                             }
                         }
                     },
@@ -683,6 +687,8 @@ final class AppStore: ObservableObject {
         missionTranscriber.stop()
         isRecordingMission = false
         liveVoiceLoopContext = ""
+        clearMissionDraftPreview()
+        clearOperatorFeedbackDraftPreview()
         let trimmedMission = missionText.trimmingCharacters(in: .whitespacesAndNewlines)
         recordingStatusMessage = trimmedMission.isEmpty ? "Ready to capture the mission from audio." : "Mission captured from audio."
     }
@@ -706,100 +712,167 @@ final class AppStore: ObservableObject {
     private func processCapturedMission(_ capture: MissionCapture) async {
         let trimmedTranscript = capture.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedTranscript.isEmpty else {
+            clearMissionDraftPreview()
             capture.deleteTemporaryAudioFileIfNeeded()
             return
         }
 
+        let baseMissionText = missionDraftBaseText ?? missionText
+        clearMissionDraftPreview()
         pauseMissionRecordingForProcessing()
-        let resolvedCapture = await resolveVoiceCapture(capture, analysisPurpose: "mission")
-        missionText = resolvedCapture.text
-        recordingStatusMessage = "Mission captured. Running x-maxx."
+        missionText = appendMissionEntry(trimmedTranscript, to: baseMissionText)
+        recordingStatusMessage = "Mission captured. Running x-maxx while voice analysis continues."
         runOODALoop(
             preserveVoiceLoop: true,
-            supplementalEnvironment: resolvedCapture.voiceContext
+            supplementalEnvironment: ""
         )
+
+        startBackgroundVoiceAnalysis(capture, analysisPurpose: "mission")
     }
 
     private func processOperatorSteering(_ capture: MissionCapture) async {
         let trimmedTranscript = capture.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedTranscript.isEmpty else {
+            clearOperatorFeedbackDraftPreview()
             capture.deleteTemporaryAudioFileIfNeeded()
             return
         }
 
-        let resolvedCapture = await resolveVoiceCapture(capture, analysisPurpose: "steering")
-        let normalized = resolvedCapture.text.lowercased()
+        let baseOperatorFeedback = operatorFeedbackDraftBaseText ?? operatorFeedback
+        clearOperatorFeedbackDraftPreview()
+        let normalized = trimmedTranscript.lowercased()
 
         if normalized.contains("stop loop") || normalized.contains("cancel loop") || normalized.contains("halt loop") {
             recordingStatusMessage = "Voice command received. Stopping the loop."
+            capture.deleteTemporaryAudioFileIfNeeded()
             stopLoop()
             return
         }
 
-        operatorFeedback = appendOperatorFeedbackEntry(resolvedCapture.text)
-        if !resolvedCapture.voiceContext.isEmpty {
-            liveVoiceLoopContext = resolvedCapture.voiceContext
-        }
+        operatorFeedback = appendOperatorFeedbackEntry(trimmedTranscript, to: baseOperatorFeedback)
         persistWorkspaceDraft()
-        recordingStatusMessage = "Steering captured. The next iteration will use it."
+        recordingStatusMessage = "Steering captured immediately. The loop will use it while voice analysis continues."
+        startBackgroundVoiceAnalysis(capture, analysisPurpose: "steering")
     }
 
-    private func resolveVoiceCapture(
+    private func startBackgroundVoiceAnalysis(
         _ capture: MissionCapture,
         analysisPurpose: String
-    ) async -> (text: String, voiceContext: String) {
-        defer {
+    ) {
+        guard !pyannoteAPIKey.isEmpty, let audioFileURL = capture.audioFileURL else {
+            voiceAnalysisSummary = pyannoteAPIKey.isEmpty ? "" : "Local speech transcript captured."
             capture.deleteTemporaryAudioFileIfNeeded()
+            return
         }
 
-        var resolvedText = capture.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
-        var resolvedVoiceContext = ""
+        let apiKey = pyannoteAPIKey
+        let fallbackTranscript = capture.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+        voiceAnalysisSummary = analysisPurpose == "mission"
+            ? "Mission appended. Speaker analysis is running in the background."
+            : "Steering appended. Speaker analysis is running in the background."
 
-        if !pyannoteAPIKey.isEmpty, let audioFileURL = capture.audioFileURL {
-            recordingStatusMessage = analysisPurpose == "mission"
-                ? "Mission captured. Analyzing speakers with pyannote."
-                : "Steering captured. Analyzing speakers with pyannote."
+        Task { @MainActor [weak self] in
+            guard let self else {
+                capture.deleteTemporaryAudioFileIfNeeded()
+                return
+            }
+
+            defer {
+                capture.deleteTemporaryAudioFileIfNeeded()
+            }
 
             do {
-                let analysis = try await pyannoteClient.analyzeUtterance(
+                let analysis = try await self.pyannoteClient.analyzeUtterance(
                     audioFileURL: audioFileURL,
-                    apiKey: pyannoteAPIKey
+                    apiKey: apiKey
                 )
-                if !analysis.missionTranscript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    resolvedText = analysis.missionTranscript
-                }
-                resolvedVoiceContext = analysis.loopContext
-                voiceAnalysisSummary = analysis.summary
-            } catch {
-                voiceAnalysisSummary = "pyannote analysis unavailable. Using local speech transcript."
-                recordingStatusMessage = "pyannote unavailable. Using the local speech transcript."
-            }
-        } else {
-            voiceAnalysisSummary = pyannoteAPIKey.isEmpty ? "" : "Local speech transcript captured."
-        }
 
-        return (
-            text: resolvedText,
-            voiceContext: resolvedVoiceContext
-        )
+                self.voiceAnalysisSummary = analysis.summary
+                if !analysis.loopContext.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    self.liveVoiceLoopContext = analysis.loopContext
+                }
+            } catch {
+                self.voiceAnalysisSummary = fallbackTranscript.isEmpty
+                    ? "pyannote analysis unavailable."
+                    : "pyannote analysis unavailable. Using the appended local speech transcript."
+            }
+        }
     }
 
-    private func appendOperatorFeedbackEntry(_ entry: String) -> String {
-        let trimmedEntry = entry.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedEntry.isEmpty else { return operatorFeedback }
+    private func updateMissionDraft(with transcript: String) {
+        let trimmedTranscript = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTranscript.isEmpty else { return }
 
-        let formattedEntry = "Voice steer: \(trimmedEntry)"
-        let existingEntries = operatorFeedback
+        if missionDraftBaseText == nil {
+            missionDraftBaseText = missionText
+        }
+
+        missionText = appendMissionEntry(trimmedTranscript, to: missionDraftBaseText ?? "")
+    }
+
+    private func updateOperatorFeedbackDraft(with transcript: String) {
+        let trimmedTranscript = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTranscript.isEmpty else { return }
+
+        if operatorFeedbackDraftBaseText == nil {
+            operatorFeedbackDraftBaseText = operatorFeedback
+        }
+
+        operatorFeedback = appendOperatorFeedbackEntry(trimmedTranscript, to: operatorFeedbackDraftBaseText ?? "")
+    }
+
+    private func clearMissionDraftPreview() {
+        missionDraftBaseText = nil
+    }
+
+    private func clearOperatorFeedbackDraftPreview() {
+        operatorFeedbackDraftBaseText = nil
+    }
+
+    private func appendMissionEntry(_ entry: String, to existingText: String) -> String {
+        appendDistinctEntry(entry, prefix: nil, existingText: existingText, limit: nil)
+    }
+
+    private func appendOperatorFeedbackEntry(_ entry: String, to existingText: String) -> String {
+        let trimmedEntry = entry.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedEntry.isEmpty else { return existingText }
+
+        return appendDistinctEntry(trimmedEntry, prefix: "Voice steer", existingText: existingText, limit: 12)
+    }
+
+    private func appendDistinctEntry(
+        _ entry: String,
+        prefix: String?,
+        existingText: String,
+        limit: Int?
+    ) -> String {
+        let trimmedEntry = entry.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedEntry.isEmpty else { return existingText }
+
+        let formattedEntry: String
+        if let prefix {
+            formattedEntry = "\(prefix): \(trimmedEntry)"
+        } else {
+            formattedEntry = trimmedEntry
+        }
+
+        let existingEntries = existingText
             .components(separatedBy: "\n\n")
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
 
         if existingEntries.last == formattedEntry {
-            return operatorFeedback
+            return existingText
         }
 
-        return Array((existingEntries + [formattedEntry]).suffix(6))
-            .joined(separator: "\n\n")
+        let updatedEntries = existingEntries + [formattedEntry]
+        let cappedEntries = if let limit {
+            Array(updatedEntries.suffix(limit))
+        } else {
+            updatedEntries
+        }
+
+        return cappedEntries.joined(separator: "\n\n")
     }
 
     private func runLoopSession(
