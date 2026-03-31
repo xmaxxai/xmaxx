@@ -1170,105 +1170,144 @@ private struct SettingsSheet: View {
 
     var body: some View {
         NavigationStack {
-            VStack(alignment: .leading, spacing: 20) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Profile")
-                        .font(.system(size: 14, weight: .bold, design: .rounded))
-                        .foregroundStyle(Color.white.opacity(0.58))
-
-                    TextField("Enter your name", text: $profileName)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 18, weight: .medium, design: .rounded))
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 12)
-                        .background(sheetFieldBackground)
-                }
-
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("ChatGPT API Key")
-                        .font(.system(size: 14, weight: .bold, design: .rounded))
-                        .foregroundStyle(Color.white.opacity(0.58))
-
-                    SecureField("sk-...", text: $chatGPTAPIKey)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 18, weight: .medium, design: .rounded))
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 12)
-                        .background(sheetFieldBackground)
-                }
-
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("ElevenLabs API Key")
-                        .font(.system(size: 14, weight: .bold, design: .rounded))
-                        .foregroundStyle(Color.white.opacity(0.58))
-
-                    SecureField("Enter ElevenLabs key", text: $elevenLabsAPIKey)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 18, weight: .medium, design: .rounded))
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 12)
-                        .background(sheetFieldBackground)
-
-                    Text("If ElevenLabs is unavailable, the app falls back to the macOS system voice.")
-                        .font(.system(size: 12, weight: .medium, design: .rounded))
-                        .foregroundStyle(Color.white.opacity(0.45))
-                }
-
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("pyannoteAI API Key")
-                        .font(.system(size: 14, weight: .bold, design: .rounded))
-                        .foregroundStyle(Color.white.opacity(0.58))
-
-                    SecureField("Enter pyannoteAI key", text: $pyannoteAPIKey)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 18, weight: .medium, design: .rounded))
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 12)
-                        .background(sheetFieldBackground)
-
-                    Text("Adds speaker diarization after each pause so the mission can include who spoke when. pyannote's public streaming page still says real-time diarization is coming soon, so this app uses the documented file-based API per utterance.")
-                        .font(.system(size: 12, weight: .medium, design: .rounded))
-                        .foregroundStyle(Color.white.opacity(0.45))
-                }
-
-                Toggle(isOn: $audioResponsesEnabled) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Enable Audio Responses")
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Profile")
                             .font(.system(size: 14, weight: .bold, design: .rounded))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(Color.white.opacity(0.58))
 
-                        Text("Speak loop results out loud after each iteration.")
+                        TextField("Enter your name", text: $profileName)
+                            .textFieldStyle(.plain)
+                            .font(.system(size: 18, weight: .medium, design: .rounded))
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 12)
+                            .background(sheetFieldBackground)
+                    }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("ChatGPT API Key")
+                            .font(.system(size: 14, weight: .bold, design: .rounded))
+                            .foregroundStyle(Color.white.opacity(0.58))
+
+                        SecureField("sk-...", text: $chatGPTAPIKey)
+                            .textFieldStyle(.plain)
+                            .font(.system(size: 18, weight: .medium, design: .rounded))
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 12)
+                            .background(sheetFieldBackground)
+                    }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("ElevenLabs API Key")
+                            .font(.system(size: 14, weight: .bold, design: .rounded))
+                            .foregroundStyle(Color.white.opacity(0.58))
+
+                        SecureField("Enter ElevenLabs key", text: $elevenLabsAPIKey)
+                            .textFieldStyle(.plain)
+                            .font(.system(size: 18, weight: .medium, design: .rounded))
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 12)
+                            .background(sheetFieldBackground)
+
+                        Text("If ElevenLabs is unavailable, the app falls back to the macOS system voice.")
                             .font(.system(size: 12, weight: .medium, design: .rounded))
                             .foregroundStyle(Color.white.opacity(0.45))
                     }
-                }
-                .toggleStyle(.switch)
 
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Hear")
-                        .font(.system(size: 14, weight: .bold, design: .rounded))
-                        .foregroundStyle(Color.white.opacity(0.58))
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("pyannoteAI API Key")
+                            .font(.system(size: 14, weight: .bold, design: .rounded))
+                            .foregroundStyle(Color.white.opacity(0.58))
 
-                    Picker("Hear", selection: $audioDialogueMode) {
-                        ForEach(AudioDialogueMode.allCases) { mode in
-                            Text(mode.title).tag(mode)
+                        SecureField("Enter pyannoteAI key", text: $pyannoteAPIKey)
+                            .textFieldStyle(.plain)
+                            .font(.system(size: 18, weight: .medium, design: .rounded))
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 12)
+                            .background(sheetFieldBackground)
+
+                        Text("Adds speaker diarization after each pause so the mission can include who spoke when. pyannote's public streaming page still says real-time diarization is coming soon, so this app uses the documented file-based API per utterance.")
+                            .font(.system(size: 12, weight: .medium, design: .rounded))
+                            .foregroundStyle(Color.white.opacity(0.45))
+                    }
+
+                    Toggle(isOn: $audioResponsesEnabled) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Enable Audio Responses")
+                                .font(.system(size: 14, weight: .bold, design: .rounded))
+                                .foregroundStyle(.white)
+
+                            Text("Speak loop results out loud after each iteration.")
+                                .font(.system(size: 12, weight: .medium, design: .rounded))
+                                .foregroundStyle(Color.white.opacity(0.45))
                         }
                     }
-                    .pickerStyle(.segmented)
+                    .toggleStyle(.switch)
 
-                    Text("Choose whether spoken audio uses the user-facing reply, the agent's internal narration, or both.")
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Hear")
+                            .font(.system(size: 14, weight: .bold, design: .rounded))
+                            .foregroundStyle(Color.white.opacity(0.58))
+
+                        Picker("Hear", selection: $audioDialogueMode) {
+                            ForEach(AudioDialogueMode.allCases) { mode in
+                                Text(mode.title).tag(mode)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+
+                        Text("Choose whether spoken audio uses the user-facing reply, the agent's internal narration, or both.")
+                            .font(.system(size: 12, weight: .medium, design: .rounded))
+                            .foregroundStyle(Color.white.opacity(0.45))
+                    }
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Permissions")
+                            .font(.system(size: 14, weight: .bold, design: .rounded))
+                            .foregroundStyle(Color.white.opacity(0.58))
+
+                        permissionRow(
+                            title: "Accessibility",
+                            detail: "Required for coordinate-based mouse automation.",
+                            isGranted: store.isAccessibilityGranted
+                        )
+
+                        permissionRow(
+                            title: "Screen Recording",
+                            detail: "Required once the app starts capturing the desktop. The app now requests this permission, but approval alone does not turn on screenshots until a capture bridge is added.",
+                            isGranted: store.isScreenRecordingGranted
+                        )
+
+                        HStack(spacing: 10) {
+                            Button("Request Screen Recording") {
+                                store.requestScreenRecordingPermission()
+                            }
+                            .buttonStyle(.borderedProminent)
+
+                            Button("Open Screen Recording Settings") {
+                                store.openScreenRecordingSettings()
+                            }
+                            .buttonStyle(.bordered)
+
+                            Button("Refresh") {
+                                store.refreshPermissionStatuses()
+                            }
+                            .buttonStyle(.bordered)
+                        }
+
+                        Text("If macOS already cached a denial, the system may not show the prompt again. In that case enable xmaxx manually in System Settings > Privacy & Security > Screen Recording.")
+                            .font(.system(size: 12, weight: .medium, design: .rounded))
+                            .foregroundStyle(Color.white.opacity(0.45))
+                    }
+
+                    Text("API keys are stored securely in the macOS Keychain for this app.")
                         .font(.system(size: 12, weight: .medium, design: .rounded))
                         .foregroundStyle(Color.white.opacity(0.45))
                 }
-
-                Text("API keys are stored securely in the macOS Keychain for this app.")
-                    .font(.system(size: 12, weight: .medium, design: .rounded))
-                    .foregroundStyle(Color.white.opacity(0.45))
-
-                Spacer()
+                .padding(24)
             }
-            .padding(24)
-            .frame(width: 520, height: 560)
+            .frame(width: 560, height: 720)
             .background(
                 LinearGradient(
                     colors: [
@@ -1302,6 +1341,9 @@ private struct SettingsSheet: View {
                 }
             }
             .navigationTitle("Settings")
+            .onAppear {
+                store.refreshPermissionStatuses()
+            }
         }
         .preferredColorScheme(.dark)
     }
@@ -1313,6 +1355,31 @@ private struct SettingsSheet: View {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .stroke(Color.white.opacity(0.10), lineWidth: 1)
             }
+    }
+
+    private func permissionRow(title: String, detail: String, isGranted: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 10) {
+                Circle()
+                    .fill(isGranted ? Color.green : Color.orange)
+                    .frame(width: 10, height: 10)
+
+                Text(title)
+                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
+
+                Text(isGranted ? "Granted" : "Missing")
+                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                    .foregroundStyle(isGranted ? Color.green.opacity(0.95) : Color.orange.opacity(0.95))
+            }
+
+            Text(detail)
+                .font(.system(size: 12, weight: .medium, design: .rounded))
+                .foregroundStyle(Color.white.opacity(0.60))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(14)
+        .background(sheetFieldBackground)
     }
 }
 

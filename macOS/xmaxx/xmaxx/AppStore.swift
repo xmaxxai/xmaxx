@@ -8,6 +8,7 @@
 import Combine
 import Foundation
 import Security
+import AppKit
 import ApplicationServices
 import CoreServices
 import AVFoundation
@@ -161,6 +162,8 @@ final class AppStore: ObservableObject {
     @Published var voiceAnalysisSummary: String
     @Published var externalDialogText: String
     @Published var internalDialogText: String
+    @Published private(set) var isAccessibilityGranted: Bool
+    @Published private(set) var isScreenRecordingGranted: Bool
     @Published var status: LoopStatus = .idle
     @Published var statusMessage: String
     @Published var currentIteration: Int
@@ -261,6 +264,8 @@ final class AppStore: ObservableObject {
         voiceAnalysisSummary = ""
         externalDialogText = "Ready to speak to the operator."
         internalDialogText = "Internal loop narration will appear here."
+        isAccessibilityGranted = SystemPermissionPrompter.isAccessibilityGranted()
+        isScreenRecordingGranted = SystemPermissionPrompter.isScreenRecordingGranted()
         maxIterations = storedMaxIterations == 0 ? 5 : min(storedMaxIterations, 12)
         currentIteration = 0
         objectiveProgress = 0.18
@@ -389,15 +394,49 @@ final class AppStore: ObservableObject {
     func triggerPermissionProbesIfNeeded() {
         guard !didTriggerPermissionProbes else { return }
         didTriggerPermissionProbes = true
+        refreshPermissionStatuses()
 
         Task { @MainActor in
             SystemPermissionPrompter.triggerAccessibilityPromptIfNeeded()
         }
 
         Task.detached(priority: .utility) {
+            _ = SystemPermissionPrompter.requestScreenRecordingAccessIfNeeded()
             SystemPermissionPrompter.triggerAutomationPrompt(forBundleIdentifier: "com.apple.finder")
             SystemPermissionPrompter.triggerAutomationPrompt()
+
+            await MainActor.run {
+                self.refreshPermissionStatuses()
+            }
         }
+    }
+
+    func refreshPermissionStatuses() {
+        isAccessibilityGranted = SystemPermissionPrompter.isAccessibilityGranted()
+        isScreenRecordingGranted = SystemPermissionPrompter.isScreenRecordingGranted()
+    }
+
+    func requestScreenRecordingPermission() {
+        refreshPermissionStatuses()
+
+        Task.detached(priority: .userInitiated) {
+            let granted = SystemPermissionPrompter.requestScreenRecordingAccessIfNeeded()
+
+            await MainActor.run {
+                self.refreshPermissionStatuses()
+                self.statusMessage = granted
+                    ? "Screen Recording access is granted."
+                    : "Screen Recording permission is still missing. Approve xmaxx in System Settings > Privacy & Security > Screen Recording."
+            }
+        }
+    }
+
+    func openScreenRecordingSettings() {
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") else {
+            return
+        }
+
+        NSWorkspace.shared.open(url)
     }
 
     func autoStartIfPossible() {
@@ -540,7 +579,9 @@ final class AppStore: ObservableObject {
     }
 
     private func runtimeCapabilitySummary() -> String {
-        let accessibilityStatus = SystemPermissionPrompter.isAccessibilityGranted() ? "granted" : "missing"
+        refreshPermissionStatuses()
+        let accessibilityStatus = isAccessibilityGranted ? "granted" : "missing"
+        let screenRecordingStatus = isScreenRecordingGranted ? "granted" : "missing"
         let pyannoteStatus = pyannoteAPIKey.isEmpty ? "disabled" : "enabled"
 
         return """
@@ -548,7 +589,8 @@ final class AppStore: ObservableObject {
         - Real automation executor available for coordinate-based mouse_move, mouse_click, and mouse_right_click.
         - Mouse automation depends on Accessibility permission. Current Accessibility status: \(accessibilityStatus).
         - Apple Events Automation approval may exist for Finder/System Events prompts, but the current action executor uses HID mouse events rather than AppleScript.
-        - Live screen capture is still unavailable, so action coordinates must come from grounded context.
+        - Screen Recording permission status: \(screenRecordingStatus).
+        - Live screen capture is still unavailable in the app, so Screen Recording approval alone does not provide screenshots yet. Action coordinates still need grounded context.
         - Live operator steering by voice is available while the loop is running.
         - pyannote speaker analysis is \(pyannoteStatus).
         """
@@ -2153,12 +2195,21 @@ private enum SystemPermissionPrompter {
         AXIsProcessTrusted()
     }
 
+    nonisolated static func isScreenRecordingGranted() -> Bool {
+        CGPreflightScreenCaptureAccess()
+    }
+
     nonisolated static func triggerAccessibilityPromptIfNeeded() {
         let options = [
             kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true
         ] as CFDictionary
 
         _ = AXIsProcessTrustedWithOptions(options)
+    }
+
+    nonisolated static func requestScreenRecordingAccessIfNeeded() -> Bool {
+        guard !CGPreflightScreenCaptureAccess() else { return true }
+        return CGRequestScreenCaptureAccess()
     }
 
     nonisolated static func triggerAutomationPrompt(forBundleIdentifier bundleIdentifier: String) {
