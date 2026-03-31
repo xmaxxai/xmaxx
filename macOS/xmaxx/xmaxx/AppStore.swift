@@ -14,13 +14,44 @@ import CoreServices
 import AVFoundation
 import Speech
 
-enum OODAPhase: String, CaseIterable, Hashable, Codable, Identifiable {
+enum NavigationPhase: String, CaseIterable, Hashable, Codable, Identifiable {
     case observe
     case orient
     case decide
     case act
+    case guide
 
     var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .observe:
+            return "Observe"
+        case .orient:
+            return "Orient"
+        case .decide:
+            return "Decide"
+        case .act:
+            return "Act"
+        case .guide:
+            return "Guide"
+        }
+    }
+
+    var shortLabel: String {
+        switch self {
+        case .observe:
+            return "What is happening?"
+        case .orient:
+            return "What does it mean?"
+        case .decide:
+            return "What should I do?"
+        case .act:
+            return "Do it"
+        case .guide:
+            return "Did this reduce distance?"
+        }
+    }
 }
 
 enum ActionStatus: String, Codable, Hashable {
@@ -86,14 +117,14 @@ enum AudioDialogueMode: String, CaseIterable, Hashable, Identifiable {
     }
 }
 
-struct OODASection: Identifiable, Hashable {
-    let phase: OODAPhase
+struct NavigationSection: Identifiable, Hashable {
+    let phase: NavigationPhase
     var headline: String
     var narrative: String
     var bullets: [String]
     var confidence: Double
 
-    var id: OODAPhase { phase }
+    var id: NavigationPhase { phase }
 }
 
 struct ActionItem: Identifiable, Hashable {
@@ -108,7 +139,7 @@ struct ActionItem: Identifiable, Hashable {
     var output: String?
 }
 
-struct OODACycle: Identifiable, Hashable {
+struct NavigationCycle: Identifiable, Hashable {
     let id = UUID()
     let iteration: Int
     let createdAt: Date
@@ -120,14 +151,14 @@ struct OODACycle: Identifiable, Hashable {
     let objectiveMet: Bool
     let isBlocked: Bool
     let blocker: String?
-    let sections: [OODASection]
+    let sections: [NavigationSection]
     let actions: [ActionItem]
 }
 
 struct ActionGraphNode: Identifiable, Hashable {
     enum Kind: Hashable {
         case loop
-        case phase(OODAPhase)
+        case phase(NavigationPhase)
         case action
     }
 
@@ -176,10 +207,10 @@ final class AppStore: ObservableObject {
     @Published var maxIterations: Int
     @Published var objectiveProgress: Double
     @Published var operatorFeedback: String
-    @Published var sections: [OODASection]
+    @Published var sections: [NavigationSection]
     @Published var actionQueue: [ActionItem]
-    @Published private(set) var cycles: [OODACycle]
-    @Published var selectedCycleID: OODACycle.ID?
+    @Published private(set) var cycles: [NavigationCycle]
+    @Published var selectedCycleID: NavigationCycle.ID?
 
     private let userDefaults: UserDefaults
     private let keychain = KeychainStore()
@@ -220,7 +251,7 @@ final class AppStore: ObservableObject {
         Current app shell is a macOS dashboard. ChatGPT planning is active, and a limited automation executor is available for coordinate-based mouse_move, mouse_click, and mouse_right_click when Accessibility permission is granted. Live screen capture is still unavailable, so actions need grounded coordinates from the environment.
         """
         let storedProfileName = userDefaults.string(forKey: profileNameKey) ?? ""
-        let storedMissionText = userDefaults.string(forKey: missionTextKey) ?? "Build a desktop computer-use copilot around the OODA loop."
+        let storedMissionText = userDefaults.string(forKey: missionTextKey) ?? "Build a desktop computer-use copilot around a guided loop."
         let persistedEnvironmentText = userDefaults.string(forKey: environmentTextKey)
         let storedEnvironmentText: String
         if let persistedEnvironmentText {
@@ -272,7 +303,7 @@ final class AppStore: ObservableObject {
         recordingStatusMessage = "Ready to capture the mission from audio."
         voiceAnalysisSummary = ""
         externalDialogText = "Ready to speak to the operator."
-        internalDialogText = "Internal loop narration will appear here."
+        internalDialogText = "Internal guided-loop narration will appear here."
         awaitingActionConfirmation = false
         isAccessibilityGranted = SystemPermissionPrompter.isAccessibilityGranted()
         isScreenRecordingGranted = SystemPermissionPrompter.isScreenRecordingGranted()
@@ -286,12 +317,12 @@ final class AppStore: ObservableObject {
         sections = starterSections
         actionQueue = starterActions
         cycles = [
-            OODACycle(
+            NavigationCycle(
                 iteration: 0,
                 createdAt: .now,
                 mission: storedMissionText,
                 environment: storedEnvironmentText,
-                summary: "Initial shell configured. Ready to generate the first loop with ChatGPT.",
+                summary: "Initial shell configured. Ready to generate the first guided cycle with ChatGPT.",
                 model: "Planning Shell",
                 progress: 0.18,
                 objectiveMet: false,
@@ -301,11 +332,11 @@ final class AppStore: ObservableObject {
                 actions: starterActions
             )
         ]
-        statusMessage = "Wire observation inputs, generate plans, and keep the loop tight."
+        statusMessage = "Observe clearly, act deliberately, and guide the distance to goal."
         selectedCycleID = cycles.first?.id
     }
 
-    var selectedCycle: OODACycle? {
+    var selectedCycle: NavigationCycle? {
         cycles.first(where: { $0.id == selectedCycleID })
     }
 
@@ -316,7 +347,7 @@ final class AppStore: ObservableObject {
     var actionGraphSnapshot: ActionGraphSnapshot {
         let loopNode = ActionGraphNode(
             id: "loop-\(currentIteration)",
-            title: currentIteration == 0 ? "Loop Standby" : "Loop \(currentIteration)",
+            title: currentIteration == 0 ? "Navigator Standby" : "Cycle \(currentIteration)",
             subtitle: status.title,
             kind: .loop,
             emphasis: max(objectiveProgress, 0.25)
@@ -325,7 +356,7 @@ final class AppStore: ObservableObject {
         let phaseNodes = sections.map { section in
             ActionGraphNode(
                 id: "phase-\(section.phase.rawValue)",
-                title: section.phase.rawValue.capitalized,
+                title: section.phase.title,
                 subtitle: section.headline,
                 kind: .phase(section.phase),
                 emphasis: max(section.confidence, 0.2)
@@ -351,19 +382,7 @@ final class AppStore: ObservableObject {
             )
         }
 
-        if let decideNode = phaseNodes.first(where: { $0.id == "phase-decide" }),
-           let actNode = phaseNodes.first(where: { $0.id == "phase-act" }) {
-            edges.append(
-                ActionGraphEdge(
-                    id: "\(decideNode.id)-\(actNode.id)",
-                    fromID: decideNode.id,
-                    toID: actNode.id,
-                    weight: 0.9
-                )
-            )
-        }
-
-        if let actNode = phaseNodes.first(where: { $0.id == "phase-act" }) {
+        if let actNode = phaseNodes.first(where: { $0.id == "phase-\(NavigationPhase.act.rawValue)" }) {
             edges.append(contentsOf: actionNodes.map { node in
                 ActionGraphEdge(
                     id: "\(actNode.id)-\(node.id)",
@@ -374,22 +393,12 @@ final class AppStore: ObservableObject {
             })
         }
 
-        if let observeNode = phaseNodes.first(where: { $0.id == "phase-observe" }),
-           let orientNode = phaseNodes.first(where: { $0.id == "phase-orient" }),
-           let decideNode = phaseNodes.first(where: { $0.id == "phase-decide" }) {
+        for pair in zip(phaseNodes, phaseNodes.dropFirst()) {
             edges.append(
                 ActionGraphEdge(
-                    id: "\(observeNode.id)-\(orientNode.id)",
-                    fromID: observeNode.id,
-                    toID: orientNode.id,
-                    weight: 0.8
-                )
-            )
-            edges.append(
-                ActionGraphEdge(
-                    id: "\(orientNode.id)-\(decideNode.id)",
-                    fromID: orientNode.id,
-                    toID: decideNode.id,
+                    id: "\(pair.0.id)-\(pair.1.id)",
+                    fromID: pair.0.id,
+                    toID: pair.1.id,
                     weight: 0.8
                 )
             )
@@ -455,7 +464,7 @@ final class AppStore: ObservableObject {
 
         guard !chatGPTAPIKey.isEmpty else {
             status = .awaitingAPIKey
-            statusMessage = "Add your ChatGPT API key in settings to start the voice loop."
+            statusMessage = "Add your ChatGPT API key in settings to start the guided loop."
             return
         }
 
@@ -522,7 +531,7 @@ final class AppStore: ObservableObject {
         userDefaults.set(voiceLoopEnabled, forKey: voiceLoopEnabledKey)
     }
 
-    func selectCycle(_ cycle: OODACycle) {
+    func selectCycle(_ cycle: NavigationCycle) {
         selectedCycleID = cycle.id
         sections = cycle.sections
         actionQueue = cycle.actions
@@ -532,7 +541,7 @@ final class AppStore: ObservableObject {
         statusMessage = cycle.summary
     }
 
-    func runOODALoop(
+    func runNavigationLoop(
         preserveVoiceLoop: Bool = false,
         supplementalEnvironment: String = ""
     ) {
@@ -547,20 +556,20 @@ final class AppStore: ObservableObject {
 
         guard !trimmedMission.isEmpty else {
             status = .failed
-            statusMessage = "Add a mission before running the loop."
+            statusMessage = "Add a mission before running the guided loop."
             scheduleMissionListeningRestartIfNeeded()
             return
         }
 
         guard !chatGPTAPIKey.isEmpty else {
             status = .awaitingAPIKey
-            statusMessage = "Add your ChatGPT API key in settings to generate a loop."
+            statusMessage = "Add your ChatGPT API key in settings to generate a guided cycle."
             scheduleMissionListeningRestartIfNeeded()
             return
         }
 
         status = .running
-        statusMessage = "Starting x-maxx loop."
+        statusMessage = "Starting x-maxx navigator."
         currentIteration = 0
         objectiveProgress = 0.18
 
@@ -653,7 +662,7 @@ final class AppStore: ObservableObject {
             guard !isAgentSpeaking else { return }
             missionTranscriber.resumeSegmentDelivery()
             recordingStatusMessage = status == .running
-                ? "Loop running. Mic is active for steering. Pause to inject guidance."
+                ? "Guided loop running. Mic is active for steering. Pause to inject guidance."
                 : "Listening continuously. Pause to start x-maxx."
             return
         }
@@ -684,7 +693,7 @@ final class AppStore: ObservableObject {
                 isRecordingMission = true
                 if status == .running {
                     missionTranscriber.resumeSegmentDelivery()
-                    recordingStatusMessage = "Loop running. Mic is active for steering. Pause to inject guidance."
+                    recordingStatusMessage = "Guided loop running. Mic is active for steering. Pause to inject guidance."
                 } else if isAgentSpeaking {
                     missionTranscriber.suspendSegmentDelivery()
                     recordingStatusMessage = "Speaking response. Mic stays live while self-voice is ignored."
@@ -714,7 +723,7 @@ final class AppStore: ObservableObject {
     private func pauseMissionRecordingForProcessing() {
         if voiceLoopEnabled {
             recordingStatusMessage = status == .running
-                ? "Loop running. Mic is active for steering. Pause to inject guidance."
+                ? "Guided loop running. Mic is active for steering. Pause to inject guidance."
                 : "Processing mission. Mic is active."
         }
     }
@@ -740,7 +749,7 @@ final class AppStore: ObservableObject {
         pauseMissionRecordingForProcessing()
         missionText = appendMissionEntry(trimmedTranscript, to: baseMissionText)
         recordingStatusMessage = "Mission captured. Running x-maxx while voice analysis continues."
-        runOODALoop(
+        runNavigationLoop(
             preserveVoiceLoop: true,
             supplementalEnvironment: ""
         )
@@ -961,7 +970,7 @@ final class AppStore: ObservableObject {
         loopTask = nil
         status = .running
         statusMessage = "Restarting planning with updated operator guidance."
-        runOODALoop(
+        runNavigationLoop(
             preserveVoiceLoop: true,
             supplementalEnvironment: preservedVoiceContext
         )
@@ -972,7 +981,7 @@ final class AppStore: ObservableObject {
         environment: String,
         operatorFeedback: String
     ) async throws {
-        var history: [OODACycle] = []
+        var history: [NavigationCycle] = []
         let limit = min(max(maxIterations, 1), 12)
         var iteration = 1
 
@@ -981,7 +990,7 @@ final class AppStore: ObservableObject {
 
             currentIteration = iteration
             status = .running
-            statusMessage = "Iteration \(iteration) of \(limit): observing and planning."
+            statusMessage = "Cycle \(iteration) of \(limit): observing, acting, and guiding."
             let liveEnvironment = composeEnvironment(
                 base: environment,
                 supplemental: composeEnvironment(
@@ -992,7 +1001,7 @@ final class AppStore: ObservableObject {
             let liveOperatorFeedback = self.operatorFeedback
                 .trimmingCharacters(in: .whitespacesAndNewlines)
 
-            let result = try await client.generateOODALoop(
+            let result = try await client.generateNavigationLoop(
                 apiKey: chatGPTAPIKey,
                 profileName: profileName,
                 mission: mission,
@@ -1012,7 +1021,7 @@ final class AppStore: ObservableObject {
                 status = .ready
                 statusMessage = "Plan ready. Say 'confirm action' to execute or keep talking to revise."
                 externalDialogText = "Plan ready. Say confirm action to execute, or keep talking to revise."
-                internalDialogText = "Waiting for action confirmation on iteration \(iteration). Fresh operator speech will revise the plan before any action executes."
+                internalDialogText = "Waiting for action confirmation on cycle \(iteration). Fresh operator speech will revise the plan before any action executes."
 
                 switch await waitForPendingActionApproval() {
                 case .revise:
@@ -1027,7 +1036,7 @@ final class AppStore: ObservableObject {
                 }
             }
 
-            let cycle = OODACycle(
+            let cycle = NavigationCycle(
                 iteration: iteration,
                 createdAt: .now,
                 mission: mission,
@@ -1058,7 +1067,7 @@ final class AppStore: ObservableObject {
                 statusMessage = cycle.summary
                 deliverDialogue(
                     external: "Objective met. \(cycle.summary)",
-                    internal: "Iteration \(cycle.iteration) completed the mission with progress at \(Int(cycle.progress * 100)) percent."
+                    internal: "Cycle \(cycle.iteration) completed the mission with progress at \(Int(cycle.progress * 100)) percent."
                 )
                 loopTask = nil
                 scheduleMissionListeningRestartIfNeeded()
@@ -1070,7 +1079,7 @@ final class AppStore: ObservableObject {
                 statusMessage = cycle.blocker ?? cycle.summary
                 deliverDialogue(
                     external: "I am blocked. \(cycle.blocker ?? cycle.summary)",
-                    internal: "Loop blocked on iteration \(cycle.iteration). Reason: \(cycle.blocker ?? cycle.summary)"
+                    internal: "Guided loop blocked on cycle \(cycle.iteration). Reason: \(cycle.blocker ?? cycle.summary)"
                 )
                 loopTask = nil
                 scheduleMissionListeningRestartIfNeeded()
@@ -1081,8 +1090,8 @@ final class AppStore: ObservableObject {
                 status = .stopped
                 statusMessage = "Reached iteration limit without meeting the objective."
                 deliverDialogue(
-                    external: "I ran out of iterations before finishing the objective.",
-                    internal: "Iteration budget exhausted at \(limit) cycles with progress at \(Int(cycle.progress * 100)) percent."
+                    external: "I ran out of guided cycles before reaching the objective.",
+                    internal: "Guided-loop budget exhausted at \(limit) cycles with progress at \(Int(cycle.progress * 100)) percent."
                 )
                 loopTask = nil
                 scheduleMissionListeningRestartIfNeeded()
@@ -1164,7 +1173,7 @@ final class AppStore: ObservableObject {
             )
 
             if self.status == .running {
-                self.recordingStatusMessage = "Loop running. Mic is active for steering. Pause to inject guidance."
+                self.recordingStatusMessage = "Guided loop running. Mic is active for steering. Pause to inject guidance."
             } else {
                 self.recordingStatusMessage = "Listening continuously. Pause to start x-maxx."
             }
@@ -1226,98 +1235,109 @@ final class AppStore: ObservableObject {
     }
 }
 
-private extension OODACycle {
+private extension NavigationCycle {
     var externalDialogue: String {
         let actionTitles = actions.prefix(2).map(\.title).joined(separator: ", ")
 
         guard !actionTitles.isEmpty else {
-            return "Iteration \(iteration). \(summary)"
+            return "Cycle \(iteration). \(summary)"
         }
 
-        return "Iteration \(iteration). \(summary) Next I will handle \(actionTitles)."
+        return "Cycle \(iteration). \(summary) Next I will handle \(actionTitles)."
     }
 
     var internalDialogue: String {
         let observeHeadline = sections.first(where: { $0.phase == .observe })?.headline ?? "Observation unavailable"
-        let decideHeadline = sections.first(where: { $0.phase == .decide })?.headline ?? "Decision unavailable"
+        let guideHeadline = sections.first(where: { $0.phase == .guide })?.headline ?? "Guidance unavailable"
         let actionTools = actions.prefix(3).map { "\($0.tool) on \($0.target)" }.joined(separator: "; ")
 
         if actionTools.isEmpty {
-            return "Iteration \(iteration). Observe: \(observeHeadline). Decide: \(decideHeadline). No executable actions were attached."
+            return "Cycle \(iteration). Observe: \(observeHeadline). Guide: \(guideHeadline). No executable actions were attached."
         }
 
-        return "Iteration \(iteration). Observe: \(observeHeadline). Decide: \(decideHeadline). Planned actions: \(actionTools). Progress is \(Int(progress * 100)) percent."
+        return "Cycle \(iteration). Observe: \(observeHeadline). Guide: \(guideHeadline). Planned actions: \(actionTools). Progress is \(Int(progress * 100)) percent."
     }
 }
 
 extension AppStore {
-    static let placeholderSections: [OODASection] = [
-        OODASection(
+    static let placeholderSections: [NavigationSection] = [
+        NavigationSection(
             phase: .observe,
-            headline: "Observe the machine state",
-            narrative: "Capture the current screen, focused app, recent events, and direct user intent before making moves.",
+            headline: "Track the live machine state",
+            narrative: "Capture the current screen, focused app, recent events, and operator command before making any move.",
             bullets: [
-                "Collect screen and window context.",
-                "Track user command and recent history.",
+                "Collect screen, window, and focused-app context.",
+                "Track the latest operator command and recent history.",
                 "Prefer facts over guesses."
             ],
             confidence: 0.35
         ),
-        OODASection(
+        NavigationSection(
             phase: .orient,
-            headline: "Build the operating picture",
-            narrative: "Transform raw signals into a grounded model of what the user is doing, what matters next, and what tools are available.",
+            headline: "Interpret the situation",
+            narrative: "Translate raw signals into a grounded picture of what matters, what changed, and what constraints shape the next move.",
             bullets: [
-                "Summarize goals, blockers, and constraints.",
-                "Note missing information explicitly.",
-                "Update the mental model every cycle."
+                "Summarize goals, blockers, and relevant constraints.",
+                "Call out uncertainty and missing information explicitly.",
+                "Update the operating picture every cycle."
             ],
             confidence: 0.40
         ),
-        OODASection(
+        NavigationSection(
             phase: .decide,
             headline: "Choose the next move",
             narrative: "Select the smallest action sequence that reduces uncertainty or advances the mission without creating avoidable risk.",
             bullets: [
                 "Prioritize reversible moves.",
                 "Keep the plan short and inspectable.",
-                "Escalate when stakes are high."
-            ],
-            confidence: 0.42
-        ),
-        OODASection(
-            phase: .act,
-            headline: "Execute and loop fast",
-            narrative: "Run the chosen step, inspect the result immediately, and fold the outcome back into the next observation cycle.",
-            bullets: [
-                "Execute the next action clearly.",
-                "Log results and anomalies.",
-                "Re-enter observation immediately."
+                "Escalate when the stakes are high."
             ],
             confidence: 0.38
+        ),
+        NavigationSection(
+            phase: .act,
+            headline: "Execute the chosen step",
+            narrative: "Run the selected action clearly and record the actual result instead of the intended one.",
+            bullets: [
+                "Execute the next action cleanly.",
+                "Log outputs, anomalies, and execution errors.",
+                "Preserve a clear before-and-after state."
+            ],
+            confidence: 0.36
+        ),
+        NavigationSection(
+            phase: .guide,
+            headline: "Measure distance to goal",
+            narrative: "Evaluate whether the last action reduced distance to the objective, increased certainty, or created drift that needs correction.",
+            bullets: [
+                "Ask whether the last move closed distance to the mission.",
+                "State what changed and what still remains.",
+                "Feed that guidance back into the next observation cycle."
+            ],
+            confidence: 0.34
         )
     ]
 
     static let placeholderActions: [ActionItem] = [
         ActionItem(
-            title: "Add screen observation bridge",
+            title: "Add richer observation bridge",
             tool: "Frontend",
-            target: "Observation panel",
-            rationale: "Computer use starts with reliable state capture.",
+            target: "Observe stage",
+            rationale: "The loop starts with grounded state capture.",
             status: .ready
         ),
         ActionItem(
-            title: "Connect ChatGPT planning call",
+            title: "Connect ChatGPT guided loop synthesis",
             tool: "Responses API",
-            target: "OODA cycle generation",
-            rationale: "Turn mission and environment text into an explicit plan.",
+            target: "Guided cycle generation",
+            rationale: "Turn mission and environment text into a five-stage guided loop.",
             status: .done
         ),
         ActionItem(
-            title: "Add safe action executor",
+            title: "Add guide-stage scoring",
             tool: "Automation bridge",
-            target: "Act phase",
-            rationale: "Planned actions need a controlled execution layer next.",
+            target: "Guide stage",
+            rationale: "The loop should score whether actions actually reduced distance to the goal.",
             status: .queued
         )
     ]
@@ -1330,7 +1350,7 @@ private struct GeneratedLoop {
     let objectiveMet: Bool
     let isBlocked: Bool
     let blocker: String?
-    let sections: [OODASection]
+    let sections: [NavigationSection]
     let actions: [ActionItem]
 }
 
@@ -1338,7 +1358,7 @@ private struct OpenAIClient {
     private let session = URLSession.shared
     private let model = "gpt-4.1-mini"
 
-    func generateOODALoop(
+    func generateNavigationLoop(
         apiKey: String,
         profileName: String,
         mission: String,
@@ -1346,21 +1366,27 @@ private struct OpenAIClient {
         operatorFeedback: String,
         iteration: Int,
         maxIterations: Int,
-        priorCycles: [OODACycle]
+        priorCycles: [NavigationCycle]
     ) async throws -> GeneratedLoop {
         guard let url = URL(string: "https://api.openai.com/v1/responses") else {
             throw OpenAIClientError.invalidRequest
         }
 
         let systemPrompt = """
-        You are driving an autonomous x-maxx OODA loop for a desktop computer-use copilot.
+        You are driving an autonomous x-maxx guided loop for a desktop computer-use copilot.
         Return JSON only.
         Use grounded reasoning. If information is missing, say that directly instead of inventing facts.
         Goal: maximize progress toward objective x, where x is the user's mission.
-        The loop should continue until the objective is met, the agent is blocked, or the iteration budget is exhausted.
+        The guided cycle should continue until the objective is met, the agent is blocked, or the iteration budget is exhausted.
         Treat operator feedback as live steering from the human. If it changes priorities, constraints, or desired direction, adapt immediately in the next iteration instead of continuing the old plan.
         Keep the loop steerable: prefer small, reversible next moves over long speculative plans when live steering is present.
         If the mission or latest steering is ambiguous, say exactly what clarification is needed.
+        Structure the reasoning around five stages:
+        1. Observe -> what is happening?
+        2. Orient -> what does it mean?
+        3. Decide -> what should I do?
+        4. Act -> do it.
+        5. Guide -> did this reduce distance to the goal?
 
         Required JSON shape:
         {
@@ -1373,6 +1399,7 @@ private struct OpenAIClient {
           "orient": { "headline": "string", "narrative": "string", "bullets": ["string"], "confidence": 0.0 },
           "decide": { "headline": "string", "narrative": "string", "bullets": ["string"], "confidence": 0.0 },
           "act": { "headline": "string", "narrative": "string", "bullets": ["string"], "confidence": 0.0 },
+          "guide": { "headline": "string", "narrative": "string", "bullets": ["string"], "confidence": 0.0 },
           "actions": [
             { "title": "string", "tool": "string", "target": "string", "rationale": "string", "status": "queued|ready|blocked|done", "x": 0.0, "y": 0.0 }
           ]
@@ -1392,7 +1419,7 @@ private struct OpenAIClient {
             let blockerText = cycle.blocker ?? "none"
             let actionTitles = cycle.actions.map(\.title).joined(separator: ", ")
             return """
-            Iteration \(cycle.iteration)
+            Cycle \(cycle.iteration)
             Summary: \(cycle.summary)
             Progress: \(Int(cycle.progress * 100))%
             Objective Met: \(cycle.objectiveMet)
@@ -1403,7 +1430,7 @@ private struct OpenAIClient {
         }.joined(separator: "\n\n")
         let userPrompt = """
         Profile: \(operatorName)
-        Iteration: \(iteration) of \(maxIterations)
+        Cycle: \(iteration) of \(maxIterations)
         Mission:
         \(mission)
 
@@ -1416,7 +1443,7 @@ private struct OpenAIClient {
         Prior cycles:
         \(historySummary)
 
-        Produce the next OODA loop for this app. This is a macOS desktop copilot dashboard. It can plan through ChatGPT, it has a limited real automation executor for coordinate-based mouse actions, and it does not yet have live screen capture. Make the output useful, specific, and honest about gaps. Push the loop forward instead of repeating generic advice. Assume operator feedback may have arrived while the loop was already running, and give it priority over stale earlier plans.
+        Produce the next guided cycle for this app. This is a macOS desktop copilot dashboard. It can plan through ChatGPT, it has a limited real automation executor for coordinate-based mouse actions, and it does not yet have live screen capture. Make the output useful, specific, and honest about gaps. Push the loop forward instead of repeating generic advice. Assume operator feedback may have arrived while the cycle was already running, and give it priority over stale earlier plans.
         """
 
         var request = URLRequest(url: url)
@@ -1479,7 +1506,8 @@ private struct OpenAIClient {
                 loopResponse.observe.makeSection(for: .observe),
                 loopResponse.orient.makeSection(for: .orient),
                 loopResponse.decide.makeSection(for: .decide),
-                loopResponse.act.makeSection(for: .act)
+                loopResponse.act.makeSection(for: .act),
+                loopResponse.guide.makeSection(for: .guide)
             ],
             actions: loopResponse.actions.map {
                 ActionItem(
@@ -2530,7 +2558,7 @@ private enum OpenAIClientError: LocalizedError {
         case .invalidResponse:
             return "The ChatGPT response was not a valid HTTP response."
         case .emptyOutput:
-            return "ChatGPT returned no usable OODA plan."
+            return "ChatGPT returned no usable guided cycle."
         case let .network(error):
             return error.xmaxxDescription(for: "OpenAI")
         case let .apiError(message):
@@ -2610,6 +2638,7 @@ private struct LoopResponse: Decodable {
     let orient: LoopSectionResponse
     let decide: LoopSectionResponse
     let act: LoopSectionResponse
+    let guide: LoopSectionResponse
     let actions: [LoopActionResponse]
 
     enum CodingKeys: String, CodingKey {
@@ -2622,6 +2651,7 @@ private struct LoopResponse: Decodable {
         case orient
         case decide
         case act
+        case guide
         case actions
     }
 }
@@ -2632,8 +2662,8 @@ private struct LoopSectionResponse: Decodable {
     let bullets: [String]
     let confidence: Double
 
-    func makeSection(for phase: OODAPhase) -> OODASection {
-        OODASection(
+    func makeSection(for phase: NavigationPhase) -> NavigationSection {
+        NavigationSection(
             phase: phase,
             headline: headline,
             narrative: narrative,

@@ -153,7 +153,7 @@ private struct HeaderBar: View {
                 .font(.system(size: 38, weight: .black, design: .rounded))
                 .foregroundStyle(.white)
 
-            Text("Observe. Orient. Decide. Act. Then loop again.")
+            Text("Observe what is happening. Orient to what it means. Decide. Act. Guide the distance to goal.")
                 .font(.system(size: 15, weight: .semibold, design: .rounded))
                 .foregroundStyle(Color.white.opacity(0.62))
         }
@@ -231,11 +231,11 @@ private struct ControlDeckPanel: View {
             VStack(alignment: .leading, spacing: 18) {
                 sectionLabel("Mission Control")
 
-                Text("Shape the loop")
+                Text("Shape the guided loop")
                     .font(.system(size: 30, weight: .bold, design: .rounded))
                     .foregroundStyle(.white)
 
-                Text("Feed the model the real mission and current machine state. The tighter the inputs, the better the next move.")
+                Text("Feed the model the real mission, current machine state, and fresh steering. The tighter the inputs, the better the next move.")
                     .font(.system(size: 14, weight: .medium, design: .rounded))
                     .foregroundStyle(Color.white.opacity(0.62))
                     .fixedSize(horizontal: false, vertical: true)
@@ -303,7 +303,7 @@ private struct ControlDeckPanel: View {
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
 
-                        Text("Turn on the microphone and keep talking naturally. The first utterance starts the mission, and while the loop runs you can keep speaking short steering updates; each pause gets folded into the next iteration.")
+                        Text("Turn on the microphone and keep talking naturally. The first utterance starts the mission, and while the loop runs you can keep speaking short steering updates; each pause gets folded into the next guided cycle.")
                             .font(.system(size: 11, weight: .medium, design: .rounded))
                             .foregroundStyle(Color.white.opacity(0.42))
                             .multilineTextAlignment(.leading)
@@ -342,11 +342,11 @@ private struct ControlDeckPanel: View {
 
                 VStack(alignment: .leading, spacing: 10) {
                     Button {
-                        store.runOODALoop()
+                        store.runNavigationLoop()
                     } label: {
                         HStack {
                             Image(systemName: store.status == .running ? "bolt.horizontal.circle.fill" : "play.circle.fill")
-                            Text(store.status == .running ? "Running OODA Loop" : "Run OODA Loop")
+                            Text(store.status == .running ? "Running Guided Loop" : "Run Guided Loop")
                         }
                         .font(.system(size: 16, weight: .bold, design: .rounded))
                         .foregroundStyle(Color.black.opacity(0.86))
@@ -428,8 +428,8 @@ private struct MissionBoard: View {
                 VStack(alignment: .leading, spacing: 18) {
                     HStack {
                         VStack(alignment: .leading, spacing: 8) {
-                            sectionLabel("OODA Board")
-                            Text("Computer-use loop")
+                            sectionLabel("Guided Loop")
+                            Text("Observe. Orient. Decide. Act. Guide.")
                                 .font(.system(size: 30, weight: .bold, design: .rounded))
                                 .foregroundStyle(.white)
                         }
@@ -460,7 +460,7 @@ private struct MissionBoard: View {
 
                     LazyVGrid(columns: columns, spacing: 16) {
                         ForEach(store.sections) { section in
-                            OODACard(section: section)
+                            NavigationCard(section: section)
                         }
                     }
                 }
@@ -470,7 +470,7 @@ private struct MissionBoard: View {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
                         VStack(alignment: .leading, spacing: 8) {
-                            sectionLabel("Act Queue")
+                            sectionLabel("Action Queue")
                             Text("Operator-facing action plan")
                                 .font(.system(size: 28, weight: .bold, design: .rounded))
                                 .foregroundStyle(.white)
@@ -480,7 +480,7 @@ private struct MissionBoard: View {
                     }
 
                     if store.actionQueue.isEmpty {
-                        Text("No actions yet. Run the loop to generate the next plan.")
+                        Text("No actions yet. Run the guided loop to generate the next plan.")
                             .font(.system(size: 15, weight: .medium, design: .rounded))
                             .foregroundStyle(Color.white.opacity(0.55))
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -501,8 +501,8 @@ private struct MissionBoard: View {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
                         VStack(alignment: .leading, spacing: 8) {
-                            sectionLabel("3D Action Graph")
-                            Text("Live action topology")
+                            sectionLabel("3D Loop Graph")
+                            Text("Live guided topology")
                                 .font(.system(size: 28, weight: .bold, design: .rounded))
                                 .foregroundStyle(.white)
                         }
@@ -517,7 +517,7 @@ private struct MissionBoard: View {
                     ActionGraphScene(snapshot: store.actionGraphSnapshot)
                         .frame(minHeight: 320)
 
-                    Text("The graph updates as the loop changes, linking OODA phases to the actions that are queued, running, blocked, or done.")
+                    Text("The graph updates as the loop changes, linking Observe, Orient, Decide, Act, and Guide to the actions that are queued, running, blocked, or done.")
                         .font(.system(size: 12, weight: .medium, design: .rounded))
                         .foregroundStyle(Color.white.opacity(0.48))
                         .fixedSize(horizontal: false, vertical: true)
@@ -599,16 +599,18 @@ private struct ActionGraphScene: View {
             case let .phase(phase):
                 switch phase {
                 case .observe:
-                    return SCNVector3(-5.2, 1.8, 0)
+                    return SCNVector3(-6.0, 1.9, 0)
                 case .orient:
-                    return SCNVector3(-1.7, 1.2, 1.6)
+                    return SCNVector3(-3.0, 1.1, 1.6)
                 case .decide:
-                    return SCNVector3(1.7, 1.2, -1.6)
+                    return SCNVector3(0, 0.8, -1.7)
                 case .act:
-                    return SCNVector3(5.2, 1.8, 0)
+                    return SCNVector3(3.0, 1.1, 1.6)
+                case .guide:
+                    return SCNVector3(6.0, 1.9, 0)
                 }
             case .action:
-                let actionIndex = max(index - 5, 0)
+                let actionIndex = max(index - 6, 0)
                 let row = actionIndex % 3
                 let column = actionIndex / 3
                 return SCNVector3(
@@ -685,6 +687,8 @@ private struct ActionGraphScene: View {
                 return NSColor(calibratedRed: 0.98, green: 0.74, blue: 0.28, alpha: 1)
             case .act:
                 return NSColor(calibratedRed: 0.99, green: 0.48, blue: 0.36, alpha: 1)
+            case .guide:
+                return NSColor(calibratedRed: 0.80, green: 0.88, blue: 0.43, alpha: 1)
             }
         case .action:
             return NSColor(calibratedRed: 0.83, green: 0.87, blue: 0.94, alpha: 1)
@@ -738,7 +742,7 @@ private struct ActivityRail: View {
 
             PanelSurface {
                 VStack(alignment: .leading, spacing: 16) {
-                    sectionLabel("Recent Loops")
+                    sectionLabel("Recent Cycles")
                     Text("History")
                         .font(.system(size: 30, weight: .bold, design: .rounded))
                         .foregroundStyle(.white)
@@ -762,7 +766,7 @@ private struct ActivityRail: View {
             PanelSurface {
                 VStack(alignment: .leading, spacing: 16) {
                     sectionLabel("Inspector")
-                    Text("Selected loop")
+                    Text("Selected cycle")
                         .font(.system(size: 28, weight: .bold, design: .rounded))
                         .foregroundStyle(.white)
 
@@ -809,16 +813,20 @@ private struct ActivityRail: View {
     }
 }
 
-private struct OODACard: View {
-    let section: OODASection
+private struct NavigationCard: View {
+    let section: NavigationSection
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 7) {
-                    Text(section.phase.rawValue.uppercased())
+                    Text(section.phase.title.uppercased())
                         .font(.system(size: 11, weight: .black, design: .rounded))
                         .foregroundStyle(accent.opacity(0.9))
+
+                    Text(section.phase.shortLabel)
+                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .foregroundStyle(Color.white.opacity(0.58))
 
                     Text(section.headline)
                         .font(.system(size: 22, weight: .bold, design: .rounded))
@@ -904,6 +912,8 @@ private struct OODACard: View {
             return Color(red: 0.98, green: 0.74, blue: 0.28)
         case .act:
             return Color(red: 0.99, green: 0.48, blue: 0.36)
+        case .guide:
+            return Color(red: 0.80, green: 0.88, blue: 0.43)
         }
     }
 
@@ -917,6 +927,8 @@ private struct OODACard: View {
             return "point.topleft.down.curvedto.point.bottomright.up.fill"
         case .act:
             return "bolt.fill"
+        case .guide:
+            return "location.viewfinder"
         }
     }
 }
@@ -1004,7 +1016,7 @@ private struct ActionRow: View {
 }
 
 private struct CycleCard: View {
-    let cycle: OODACycle
+    let cycle: NavigationCycle
     let isSelected: Bool
     let onSelect: () -> Void
 
@@ -1024,7 +1036,7 @@ private struct CycleCard: View {
                 }
 
                 HStack {
-                    Text("Loop \(cycle.iteration)")
+                    Text("Cycle \(cycle.iteration)")
                         .font(.system(size: 11, weight: .black, design: .rounded))
                         .foregroundStyle(Color.white.opacity(0.62))
 
@@ -1077,7 +1089,7 @@ private struct MetricStrip: View {
 
     private var metricCards: some View {
         Group {
-            metricCard(title: "Loops", value: "\(store.cycles.count)")
+            metricCard(title: "Cycles", value: "\(store.cycles.count)")
             metricCard(title: "Progress", value: "\(Int(store.objectiveProgress * 100))%")
             metricCard(title: "Profile", value: store.profileName.isEmpty ? "Guest" : store.profileName)
         }
@@ -1262,7 +1274,7 @@ private struct SettingsSheet: View {
                                 .font(.system(size: 14, weight: .bold, design: .rounded))
                                 .foregroundStyle(.white)
 
-                            Text("Speak loop results out loud after each iteration.")
+                            Text("Speak guided-loop results out loud after each iteration.")
                                 .font(.system(size: 12, weight: .medium, design: .rounded))
                                 .foregroundStyle(Color.white.opacity(0.45))
                         }
