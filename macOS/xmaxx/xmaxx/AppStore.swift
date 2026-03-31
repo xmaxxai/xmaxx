@@ -201,11 +201,23 @@ final class AppStore: ObservableObject {
     init(userDefaults: UserDefaults = .standard) {
         self.userDefaults = userDefaults
 
-        let storedProfileName = userDefaults.string(forKey: profileNameKey) ?? ""
-        let storedMissionText = userDefaults.string(forKey: missionTextKey) ?? "Build a desktop computer-use copilot around the OODA loop."
-        let storedEnvironmentText = userDefaults.string(forKey: environmentTextKey) ?? """
+        let legacyDefaultEnvironmentText = """
         Current app shell is a macOS dashboard. We have profile and API key settings, but no live screen capture, automation executor, or tool bridge yet.
         """
+        let currentDefaultEnvironmentText = """
+        Current app shell is a macOS dashboard. ChatGPT planning is active, and a limited automation executor is available for coordinate-based mouse_move, mouse_click, and mouse_right_click when Accessibility permission is granted. Live screen capture is still unavailable, so actions need grounded coordinates from the environment.
+        """
+        let storedProfileName = userDefaults.string(forKey: profileNameKey) ?? ""
+        let storedMissionText = userDefaults.string(forKey: missionTextKey) ?? "Build a desktop computer-use copilot around the OODA loop."
+        let persistedEnvironmentText = userDefaults.string(forKey: environmentTextKey)
+        let storedEnvironmentText: String
+        if let persistedEnvironmentText {
+            storedEnvironmentText = persistedEnvironmentText.trimmingCharacters(in: .whitespacesAndNewlines) == legacyDefaultEnvironmentText
+                ? currentDefaultEnvironmentText
+                : persistedEnvironmentText
+        } else {
+            storedEnvironmentText = currentDefaultEnvironmentText
+        }
         let storedOperatorFeedback = userDefaults.string(forKey: operatorFeedbackKey) ?? ""
         let storedMaxIterations = max(1, userDefaults.integer(forKey: maxIterationsKey))
         let storedVoiceLoopEnabled = userDefaults.object(forKey: voiceLoopEnabledKey) as? Bool ?? false
@@ -527,6 +539,21 @@ final class AppStore: ObservableObject {
         return parts.joined(separator: "\n\n")
     }
 
+    private func runtimeCapabilitySummary() -> String {
+        let accessibilityStatus = SystemPermissionPrompter.isAccessibilityGranted() ? "granted" : "missing"
+        let pyannoteStatus = pyannoteAPIKey.isEmpty ? "disabled" : "enabled"
+
+        return """
+        Runtime capability status:
+        - Real automation executor available for coordinate-based mouse_move, mouse_click, and mouse_right_click.
+        - Mouse automation depends on Accessibility permission. Current Accessibility status: \(accessibilityStatus).
+        - Apple Events Automation approval may exist for Finder/System Events prompts, but the current action executor uses HID mouse events rather than AppleScript.
+        - Live screen capture is still unavailable, so action coordinates must come from grounded context.
+        - Live operator steering by voice is available while the loop is running.
+        - pyannote speaker analysis is \(pyannoteStatus).
+        """
+    }
+
     func stopLoop() {
         loopTask?.cancel()
         loopTask = nil
@@ -749,7 +776,10 @@ final class AppStore: ObservableObject {
             statusMessage = "Iteration \(iteration) of \(limit): observing and planning."
             let liveEnvironment = composeEnvironment(
                 base: environment,
-                supplemental: liveVoiceLoopContext
+                supplemental: composeEnvironment(
+                    base: liveVoiceLoopContext,
+                    supplemental: runtimeCapabilitySummary()
+                )
             )
             let liveOperatorFeedback = self.operatorFeedback
                 .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -922,6 +952,12 @@ final class AppStore: ObservableObject {
                 guard let x = updatedActions[index].x, let y = updatedActions[index].y else {
                     updatedActions[index].status = .blocked
                     updatedActions[index].output = "Missing screen coordinates for \(updatedActions[index].tool)."
+                    continue
+                }
+
+                guard SystemPermissionPrompter.isAccessibilityGranted() else {
+                    updatedActions[index].status = .blocked
+                    updatedActions[index].output = "Mouse automation requires Accessibility permission in System Settings > Privacy & Security > Accessibility."
                     continue
                 }
 
@@ -1113,6 +1149,8 @@ private struct OpenAIClient {
         Set "blocked" true only when the next step cannot proceed without missing tooling, permissions, or new human input.
         "progress" must be a number from 0.0 to 1.0 showing estimated distance closed toward the mission.
         Available executable tools right now are mouse_move, mouse_click, and mouse_right_click. When you choose one of those tools, include absolute screen coordinates in x and y. Do not invent coordinates unless the environment explicitly gives enough information to ground them.
+        A real automation executor exists for those mouse tools. Do not claim automation is unavailable when coordinates and Accessibility permission are available.
+        Only mark the loop blocked for automation when coordinates are missing, Accessibility permission is missing, or a real tool execution error occurs.
         """
 
         let operatorName = profileName.isEmpty ? "Operator" : profileName
@@ -1144,7 +1182,7 @@ private struct OpenAIClient {
         Prior cycles:
         \(historySummary)
 
-        Produce the next OODA loop for this app. This is a macOS desktop copilot dashboard. It can plan through ChatGPT, but it does not yet have live screen capture or a real automation executor. Make the output useful, specific, and honest about gaps. Push the loop forward instead of repeating generic advice. Assume operator feedback may have arrived while the loop was already running, and give it priority over stale earlier plans.
+        Produce the next OODA loop for this app. This is a macOS desktop copilot dashboard. It can plan through ChatGPT, it has a limited real automation executor for coordinate-based mouse actions, and it does not yet have live screen capture. Make the output useful, specific, and honest about gaps. Push the loop forward instead of repeating generic advice. Assume operator feedback may have arrived while the loop was already running, and give it priority over stale earlier plans.
         """
 
         var request = URLRequest(url: url)
@@ -2111,6 +2149,10 @@ extension SpeechCoordinator: AVSpeechSynthesizerDelegate, AVAudioPlayerDelegate 
 }
 
 private enum SystemPermissionPrompter {
+    nonisolated static func isAccessibilityGranted() -> Bool {
+        AXIsProcessTrusted()
+    }
+
     nonisolated static func triggerAccessibilityPromptIfNeeded() {
         let options = [
             kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true
