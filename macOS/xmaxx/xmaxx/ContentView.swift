@@ -294,7 +294,7 @@ private struct ControlDeckPanel: View {
                                 .fixedSize(horizontal: false, vertical: true)
                         }
 
-                        Text("Turn on the microphone, say the mission, pause, and the loop will take the next step.")
+                        Text("Turn on the microphone and keep talking naturally. The mic stays live, a short pause commits the mission, and the app ignores its own voice while it speaks.")
                             .font(.system(size: 11, weight: .medium, design: .rounded))
                             .foregroundStyle(Color.white.opacity(0.42))
                             .fixedSize(horizontal: false, vertical: true)

@@ -190,7 +190,6 @@ final class AppStore: ObservableObject {
     private var speakingTask: Task<Void, Never>?
     private var didTriggerPermissionProbes = false
     private var didAutoStart = false
-    private var shouldResumeListeningAfterSpeech = false
     private let speechCoordinator = SpeechCoordinator()
     private let missionTranscriber = MissionTranscriber()
 
@@ -522,8 +521,15 @@ final class AppStore: ObservableObject {
     }
 
     private func beginMissionListening() {
-        guard voiceLoopEnabled, !isRecordingMission, !isAgentSpeaking, status != .running else { return }
+        guard voiceLoopEnabled else { return }
         listeningRestartTask?.cancel()
+
+        if isRecordingMission {
+            guard !isAgentSpeaking, status != .running else { return }
+            missionTranscriber.resumeSegmentDelivery()
+            recordingStatusMessage = "Listening continuously. Pause and I will calculate."
+            return
+        }
 
         Task {
             do {
@@ -538,23 +544,28 @@ final class AppStore: ObservableObject {
                     },
                     onFinal: { transcript in
                         Task { @MainActor in
-                            store.isRecordingMission = false
                             let trimmedTranscript = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
 
                             if !trimmedTranscript.isEmpty {
                                 store.missionText = trimmedTranscript
                                 store.recordingStatusMessage = "Mission captured. Running x-maxx."
                                 store.runOODALoop(preserveVoiceLoop: true)
-                            } else {
-                                store.recordingStatusMessage = "No mission detected. Still listening."
-                                store.scheduleMissionListeningRestartIfNeeded(delayNanoseconds: 300_000_000)
                             }
                         }
                     }
                 )
 
                 isRecordingMission = true
-                recordingStatusMessage = "Listening for the mission. Stop speaking and I will calculate."
+                if status == .running {
+                    missionTranscriber.suspendSegmentDelivery()
+                    recordingStatusMessage = "Processing mission. Mic stays live."
+                } else if isAgentSpeaking {
+                    missionTranscriber.suspendSegmentDelivery()
+                    recordingStatusMessage = "Speaking response. Mic stays live while self-voice is ignored."
+                } else {
+                    missionTranscriber.resumeSegmentDelivery()
+                    recordingStatusMessage = "Listening continuously. Pause and I will calculate."
+                }
             } catch {
                 isRecordingMission = false
                 recordingStatusMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
@@ -572,10 +583,9 @@ final class AppStore: ObservableObject {
     }
 
     private func pauseMissionRecordingForProcessing() {
-        missionTranscriber.stop()
-        isRecordingMission = false
+        missionTranscriber.suspendSegmentDelivery()
         if voiceLoopEnabled {
-            recordingStatusMessage = "Processing mission."
+            recordingStatusMessage = "Processing mission. Mic stays live."
         }
     }
 
@@ -672,18 +682,19 @@ final class AppStore: ObservableObject {
     private func scheduleMissionListeningRestartIfNeeded(delayNanoseconds: UInt64? = nil) {
         guard voiceLoopEnabled else { return }
 
-        if isAgentSpeaking {
-            shouldResumeListeningAfterSpeech = true
-            return
-        }
-
         listeningRestartTask?.cancel()
         let delay = delayNanoseconds ?? 400_000_000
 
         listeningRestartTask = Task { @MainActor in
             try? await Task.sleep(nanoseconds: delay)
             guard !Task.isCancelled, self.voiceLoopEnabled, !self.isAgentSpeaking, self.status != .running else { return }
-            self.beginMissionListening()
+
+            if self.isRecordingMission {
+                self.missionTranscriber.resumeSegmentDelivery()
+                self.recordingStatusMessage = "Listening continuously. Pause and I will calculate."
+            } else {
+                self.beginMissionListening()
+            }
         }
     }
 
@@ -718,7 +729,7 @@ final class AppStore: ObservableObject {
             guard let self else { return }
 
             if self.voiceLoopEnabled {
-                self.recordingStatusMessage = "Speaking response. Microphone is paused to prevent feedback."
+                self.recordingStatusMessage = "Speaking response. Mic stays live while self-voice is ignored."
             }
 
             await speechCoordinator.speakAndWait(
@@ -732,14 +743,14 @@ final class AppStore: ObservableObject {
 
             guard self.voiceLoopEnabled else { return }
 
-            if self.shouldResumeListeningAfterSpeech && self.status != .running {
-                self.shouldResumeListeningAfterSpeech = false
-                self.recordingStatusMessage = "Listening for the mission. Stop speaking and I will calculate."
-                self.beginMissionListening()
-            } else if self.status == .running {
-                self.recordingStatusMessage = "Processing mission."
+            if self.status == .running {
+                self.recordingStatusMessage = "Processing mission. Mic stays live."
             } else {
-                self.recordingStatusMessage = "Ready to capture the mission from audio."
+                self.missionTranscriber.resumeSegmentDelivery(
+                    afterNanoseconds: 250_000_000,
+                    suppressingPlaybackEchoFrom: spokenText
+                )
+                self.recordingStatusMessage = "Listening continuously. Pause and I will calculate."
             }
         }
     }
@@ -1134,6 +1145,7 @@ print(f"\(tool) executed at ({x:.1f}, {y:.1f})")
 
 private final class MissionTranscriber {
     private let silenceCommitDelayNanoseconds: UInt64 = 500_000_000
+    private let playbackEchoFilterDuration: TimeInterval = 1.2
     private let audioEngine = AVAudioEngine()
     private let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
@@ -1142,8 +1154,15 @@ private final class MissionTranscriber {
     private var lastRecognitionEmission = ""
     private var didCaptureSpeech = false
     private var silenceCommitTask: Task<Void, Never>?
+    private var resumeDeliveryTask: Task<Void, Never>?
+    private var updateHandler: (@Sendable (String) -> Void)?
     private var finalHandler: (@Sendable (String) -> Void)?
-    private var didFinish = false
+    private var isRunning = false
+    private var isSegmentDeliveryEnabled = true
+    private var deliveryModeVersion: UInt64 = 0
+    private var recognitionSessionVersion: UInt64 = 0
+    private var playbackEchoReference = ""
+    private var playbackEchoDeadline = Date.distantPast
 
     func start(
         initialText: String,
@@ -1172,16 +1191,8 @@ private final class MissionTranscriber {
         lastTranscript = ""
         lastRecognitionEmission = ""
         didCaptureSpeech = false
+        updateHandler = onUpdate
         finalHandler = onFinal
-        didFinish = false
-
-        let request = SFSpeechAudioBufferRecognitionRequest()
-        request.shouldReportPartialResults = true
-        if recognizer.supportsOnDeviceRecognition {
-            request.requiresOnDeviceRecognition = false
-        }
-
-        recognitionRequest = request
 
         let inputNode = audioEngine.inputNode
         let format = inputNode.outputFormat(forBus: 0)
@@ -1193,35 +1204,22 @@ private final class MissionTranscriber {
         audioEngine.prepare()
         try audioEngine.start()
 
-        recognitionTask = recognizer.recognitionTask(with: request) { [weak self] result, error in
-            if let result {
-                let transcript = result.bestTranscription.formattedString.trimmingCharacters(in: .whitespacesAndNewlines)
-                let shouldRescheduleSilenceCommit = transcript != self?.lastRecognitionEmission
-                self?.lastRecognitionEmission = transcript
-                if transcript.isEmpty {
-                    onUpdate(initialText)
-                } else {
-                    self?.didCaptureSpeech = true
-                    self?.lastTranscript = transcript
-                    onUpdate(transcript)
-                    if shouldRescheduleSilenceCommit {
-                        self?.scheduleSilenceCommit(using: transcript)
-                    }
-                }
-            }
-
-            if error != nil || (result?.isFinal ?? false) {
-                self?.finish(withFallback: initialText)
-            }
-        }
+        isRunning = true
+        isSegmentDeliveryEnabled = true
+        playbackEchoReference = ""
+        playbackEchoDeadline = .distantPast
+        _ = initialText
+        startRecognitionSession()
     }
 
     func stop() {
         silenceCommitTask?.cancel()
         silenceCommitTask = nil
+        resumeDeliveryTask?.cancel()
+        resumeDeliveryTask = nil
+        recognitionSessionVersion &+= 1
         recognitionTask?.cancel()
         recognitionTask = nil
-
         recognitionRequest?.endAudio()
         recognitionRequest = nil
 
@@ -1234,8 +1232,51 @@ private final class MissionTranscriber {
         lastTranscript = ""
         lastRecognitionEmission = ""
         didCaptureSpeech = false
+        updateHandler = nil
         finalHandler = nil
-        didFinish = false
+        isRunning = false
+        isSegmentDeliveryEnabled = true
+        deliveryModeVersion &+= 1
+        playbackEchoReference = ""
+        playbackEchoDeadline = .distantPast
+    }
+
+    func suspendSegmentDelivery() {
+        deliveryModeVersion &+= 1
+        resumeDeliveryTask?.cancel()
+        resumeDeliveryTask = nil
+        isSegmentDeliveryEnabled = false
+        playbackEchoReference = ""
+        playbackEchoDeadline = .distantPast
+        resetCurrentUtterance()
+    }
+
+    func resumeSegmentDelivery(
+        afterNanoseconds delayNanoseconds: UInt64 = 0,
+        suppressingPlaybackEchoFrom referenceText: String? = nil
+    ) {
+        deliveryModeVersion &+= 1
+        let deliveryVersion = deliveryModeVersion
+        let normalizedReference = normalize(referenceText ?? "")
+
+        resumeDeliveryTask?.cancel()
+        resumeDeliveryTask = nil
+        resetCurrentUtterance()
+
+        if delayNanoseconds == 0 {
+            guard isRunning else { return }
+            isSegmentDeliveryEnabled = true
+            configurePlaybackEchoFilter(using: normalizedReference)
+            return
+        }
+
+        isSegmentDeliveryEnabled = false
+        resumeDeliveryTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: delayNanoseconds)
+            guard let self, !Task.isCancelled, self.isRunning, self.deliveryModeVersion == deliveryVersion else { return }
+            self.isSegmentDeliveryEnabled = true
+            self.configurePlaybackEchoFilter(using: normalizedReference)
+        }
     }
 
     private func scheduleSilenceCommit(using transcript: String) {
@@ -1244,44 +1285,137 @@ private final class MissionTranscriber {
         silenceCommitTask = Task { [weak self] in
             guard let self else { return }
             try? await Task.sleep(nanoseconds: self.silenceCommitDelayNanoseconds)
-            guard !Task.isCancelled else { return }
-            self.finish(withFallback: transcript)
+            guard !Task.isCancelled, self.isRunning else { return }
+            self.finishCurrentUtterance(withFallback: transcript)
+            self.restartRecognitionSession()
         }
     }
 
-    private func finish(withFallback fallback: String) {
-        guard !didFinish else { return }
-        didFinish = true
+    private func startRecognitionSession() {
+        guard let recognizer, isRunning else { return }
 
+        recognitionSessionVersion &+= 1
+        let sessionVersion = recognitionSessionVersion
+
+        let request = SFSpeechAudioBufferRecognitionRequest()
+        request.shouldReportPartialResults = true
+        if recognizer.supportsOnDeviceRecognition {
+            request.requiresOnDeviceRecognition = false
+        }
+
+        recognitionRequest = request
+        recognitionTask = recognizer.recognitionTask(with: request) { [weak self] result, error in
+            guard let self, self.recognitionSessionVersion == sessionVersion else { return }
+            self.handleRecognition(result: result, error: error)
+        }
+    }
+
+    private func restartRecognitionSession() {
+        guard isRunning else { return }
+        recognitionSessionVersion &+= 1
+        recognitionTask?.cancel()
+        recognitionTask = nil
+        recognitionRequest?.endAudio()
+        recognitionRequest = nil
+        startRecognitionSession()
+    }
+
+    private func handleRecognition(result: SFSpeechRecognitionResult?, error: Error?) {
+        if let error {
+            _ = error
+            finishCurrentUtterance(withFallback: lastTranscript)
+            restartRecognitionSession()
+            return
+        }
+
+        guard let result else { return }
+
+        let transcript = result.bestTranscription.formattedString.trimmingCharacters(in: .whitespacesAndNewlines)
+        if shouldIgnoreTranscript(transcript) {
+            if result.isFinal {
+                finishCurrentUtterance(withFallback: transcript)
+                restartRecognitionSession()
+            }
+            return
+        }
+
+        let shouldRescheduleSilenceCommit = transcript != lastRecognitionEmission
+        lastRecognitionEmission = transcript
+
+        if !transcript.isEmpty {
+            didCaptureSpeech = true
+            lastTranscript = transcript
+            updateHandler?(transcript)
+            if shouldRescheduleSilenceCommit {
+                scheduleSilenceCommit(using: transcript)
+            }
+        }
+
+        if result.isFinal {
+            finishCurrentUtterance(withFallback: transcript)
+            restartRecognitionSession()
+        }
+    }
+
+    private func finishCurrentUtterance(withFallback fallback: String) {
         silenceCommitTask?.cancel()
         silenceCommitTask = nil
 
         let finalTranscript = lastTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
-        let resolvedTranscript: String
-        if didCaptureSpeech {
-            resolvedTranscript = finalTranscript.isEmpty ? fallback : finalTranscript
-        } else {
-            resolvedTranscript = ""
-        }
-        let handler = finalHandler
+        let resolvedTranscript = didCaptureSpeech ? (finalTranscript.isEmpty ? fallback.trimmingCharacters(in: .whitespacesAndNewlines) : finalTranscript) : ""
+        resetCurrentUtterance()
 
-        recognitionTask?.cancel()
-        recognitionTask = nil
+        guard isSegmentDeliveryEnabled, !resolvedTranscript.isEmpty else { return }
+        finalHandler?(resolvedTranscript)
+    }
 
-        recognitionRequest?.endAudio()
-        recognitionRequest = nil
-
-        if audioEngine.isRunning {
-            audioEngine.stop()
-        }
-
-        audioEngine.reset()
-        audioEngine.inputNode.removeTap(onBus: 0)
+    private func resetCurrentUtterance() {
+        silenceCommitTask?.cancel()
+        silenceCommitTask = nil
         lastTranscript = ""
         lastRecognitionEmission = ""
         didCaptureSpeech = false
-        finalHandler = nil
-        handler?(resolvedTranscript)
+    }
+
+    private func configurePlaybackEchoFilter(using reference: String) {
+        playbackEchoReference = reference
+        playbackEchoDeadline = reference.isEmpty ? .distantPast : Date().addingTimeInterval(playbackEchoFilterDuration)
+    }
+
+    private func shouldIgnoreTranscript(_ transcript: String) -> Bool {
+        guard isSegmentDeliveryEnabled else { return true }
+
+        let normalizedTranscript = normalize(transcript)
+        guard !normalizedTranscript.isEmpty else { return false }
+        guard Date() < playbackEchoDeadline, !playbackEchoReference.isEmpty else { return false }
+
+        if normalizedTranscript.count >= 12 &&
+            (playbackEchoReference.contains(normalizedTranscript) || normalizedTranscript.contains(playbackEchoReference)) {
+            return true
+        }
+
+        let transcriptWords = Set(normalizedTranscript.split(separator: " ").map(String.init))
+        let referenceWords = Set(playbackEchoReference.split(separator: " ").map(String.init))
+        let overlap = transcriptWords.intersection(referenceWords).count
+        let minimumSharedWords = min(transcriptWords.count, referenceWords.count)
+
+        guard overlap >= 3, minimumSharedWords > 0 else { return false }
+        return Double(overlap) / Double(minimumSharedWords) >= 0.7
+    }
+
+    private func normalize(_ text: String) -> String {
+        let lowercase = text.lowercased()
+        let scalars = lowercase.unicodeScalars.map { scalar -> Character in
+            if CharacterSet.alphanumerics.contains(scalar) {
+                return Character(scalar)
+            }
+
+            return " "
+        }
+
+        return String(scalars)
+            .split(whereSeparator: \.isWhitespace)
+            .joined(separator: " ")
     }
 
     private func requestSpeechAuthorization() async -> SFSpeechRecognizerAuthorizationStatus {
