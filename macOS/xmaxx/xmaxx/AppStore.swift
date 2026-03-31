@@ -1178,6 +1178,8 @@ private final class MissionTranscriber {
 
         recognitionRequest = request
 
+        configureVoiceProcessingIfPossible()
+
         let inputNode = audioEngine.inputNode
         let format = inputNode.outputFormat(forBus: 0)
         inputNode.removeTap(onBus: 0)
@@ -1219,6 +1221,7 @@ private final class MissionTranscriber {
             audioEngine.stop()
         }
 
+        audioEngine.reset()
         audioEngine.inputNode.removeTap(onBus: 0)
         finalHandler = nil
         didFinish = false
@@ -1255,6 +1258,7 @@ private final class MissionTranscriber {
             audioEngine.stop()
         }
 
+        audioEngine.reset()
         audioEngine.inputNode.removeTap(onBus: 0)
         finalHandler = nil
         handler?(resolvedTranscript)
@@ -1278,6 +1282,20 @@ private final class MissionTranscriber {
             return false
         @unknown default:
             return false
+        }
+    }
+
+    private func configureVoiceProcessingIfPossible() {
+        let inputNode = audioEngine.inputNode
+        _ = audioEngine.outputNode
+
+        do {
+            // Use the system voice-processing IO path for native echo cancellation and AGC.
+            try inputNode.setVoiceProcessingEnabled(true)
+            inputNode.isVoiceProcessingAGCEnabled = true
+            inputNode.isVoiceProcessingBypassed = false
+        } catch {
+            // Fall back to raw microphone capture when the current device route does not support it.
         }
     }
 }
