@@ -1,3 +1,4 @@
+import hashlib
 import json
 import logging
 import secrets
@@ -10,10 +11,11 @@ from django.core.exceptions import ValidationError
 from django.db import connection
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect
+from django.utils import timezone
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_http_methods
 
-from .models import Profile
+from .models import AccessToken, Profile
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +31,10 @@ PROFILE_FIELD_MAP = {
     "location": "location",
     "company": "company",
     "websiteUrl": "website_url",
+}
+
+TOKEN_FIELD_MAP = {
+    "name": "name",
 }
 
 
@@ -246,7 +252,7 @@ def _profile_key_from_model(field_name):
     return field_name
 
 
-def _profile_identity(request):
+def _account_identity(request):
     auth_user, auth_provider = _session_auth_context(request)
 
     if not auth_user or not auth_provider:
@@ -285,6 +291,13 @@ def _profile_identity(request):
 
 def _profile_queryset(identity):
     return Profile.objects.filter(
+        provider=identity["provider"],
+        provider_user_id=identity["provider_user_id"],
+    )
+
+
+def _access_token_queryset(identity):
+    return AccessToken.objects.filter(
         provider=identity["provider"],
         provider_user_id=identity["provider_user_id"],
     )
@@ -338,6 +351,45 @@ def _profile_payload(request):
     return normalized, None
 
 
+def _access_token_payload(request):
+    if not request.body:
+        payload = {}
+    else:
+        try:
+            payload = json.loads(request.body.decode("utf-8"))
+        except json.JSONDecodeError:
+            return None, _json_no_store(
+                {
+                    "error": "invalid_json",
+                    "detail": "Token requests must send a valid JSON object.",
+                },
+                status=400,
+            )
+
+        if not isinstance(payload, dict):
+            return None, _json_no_store(
+                {
+                    "error": "invalid_json",
+                    "detail": "Token requests must send a JSON object payload.",
+                },
+                status=400,
+            )
+
+    unknown_fields = sorted(set(payload) - set(TOKEN_FIELD_MAP))
+
+    if unknown_fields:
+        return None, _json_no_store(
+            {
+                "error": "unknown_fields",
+                "detail": "The request included unsupported token fields.",
+                "fields": unknown_fields,
+            },
+            status=400,
+        )
+
+    return {"name": str(payload.get("name") or "").strip()}, None
+
+
 def _profile_response(profile):
     return {
         "id": profile.id,
@@ -349,6 +401,19 @@ def _profile_response(profile):
         "websiteUrl": profile.website_url,
         "createdAt": profile.created_at.isoformat(),
         "updatedAt": profile.updated_at.isoformat(),
+    }
+
+
+def _access_token_response(token):
+    return {
+        "id": token.id,
+        "name": token.name,
+        "tokenKey": token.token_key,
+        "tokenSuffix": token.token_suffix,
+        "status": "revoked" if token.revoked_at else "active",
+        "createdAt": token.created_at.isoformat(),
+        "lastUsedAt": token.last_used_at.isoformat() if token.last_used_at else None,
+        "revokedAt": token.revoked_at.isoformat() if token.revoked_at else None,
     }
 
 
@@ -374,6 +439,39 @@ def _profile_validation_error(exc):
         },
         status=400,
     )
+
+
+def _access_token_validation_error(exc):
+    message_dict = getattr(exc, "message_dict", {})
+
+    if message_dict:
+        fields = {
+            field_name if field_name == "name" else field_name: messages
+            for field_name, messages in message_dict.items()
+            if field_name == "name"
+        }
+        detail = "The submitted token fields did not pass validation."
+    else:
+        fields = {}
+        detail = "The submitted token data did not pass validation."
+
+    return _json_no_store(
+        {
+            "error": "validation_error",
+            "detail": detail,
+            "fields": fields,
+            "messages": exc.messages,
+        },
+        status=400,
+    )
+
+
+def _build_access_token():
+    token_key = f"xtk_{secrets.token_hex(8)}"
+    token_secret = secrets.token_urlsafe(24)
+    token_value = f"xmaxx_{token_key}.{token_secret}"
+
+    return token_key, token_value, hashlib.sha256(token_value.encode("utf-8")).hexdigest(), token_secret[-4:]
 
 
 def _oauth_popup_response(provider, next_path, params):
@@ -605,7 +703,7 @@ def auth_session(request):
 @ensure_csrf_cookie
 @require_http_methods(["GET", "POST", "PATCH", "DELETE"])
 def profile_detail(request):
-    identity, error_response = _profile_identity(request)
+    identity, error_response = _account_identity(request)
 
     if error_response:
         return error_response
@@ -687,6 +785,90 @@ def profile_detail(request):
         {"profile": _profile_response(profile)},
         status=201 if request.method == "POST" else 200,
     )
+
+
+@ensure_csrf_cookie
+@require_http_methods(["GET", "POST"])
+def access_token_list(request):
+    identity, error_response = _account_identity(request)
+
+    if error_response:
+        return error_response
+
+    if request.method == "GET":
+        tokens = [_access_token_response(token) for token in _access_token_queryset(identity)]
+        return _json_no_store({"tokens": tokens})
+
+    payload, payload_error = _access_token_payload(request)
+
+    if payload_error:
+        return payload_error
+
+    if not payload["name"]:
+        return _json_no_store(
+            {
+                "error": "validation_error",
+                "detail": "The token name is required.",
+                "fields": {"name": ["Enter a token name so it can be identified later."]},
+                "messages": ["Enter a token name so it can be identified later."],
+            },
+            status=400,
+        )
+
+    token_key, token_value, token_hash, token_suffix = _build_access_token()
+
+    while AccessToken.objects.filter(token_key=token_key).exists():
+        token_key, token_value, token_hash, token_suffix = _build_access_token()
+
+    token = AccessToken(
+        provider=identity["provider"],
+        provider_user_id=identity["provider_user_id"],
+        name=payload["name"],
+        token_key=token_key,
+        token_hash=token_hash,
+        token_suffix=token_suffix,
+    )
+
+    try:
+        token.full_clean()
+        token.save()
+    except ValidationError as exc:
+        return _access_token_validation_error(exc)
+
+    return _json_no_store(
+        {
+            "token": _access_token_response(token),
+            "plainTextToken": token_value,
+            "authorizationHeader": f"Bearer {token_value}",
+        },
+        status=201,
+    )
+
+
+@ensure_csrf_cookie
+@require_http_methods(["DELETE"])
+def access_token_detail(request, token_key):
+    identity, error_response = _account_identity(request)
+
+    if error_response:
+        return error_response
+
+    token = _access_token_queryset(identity).filter(token_key=token_key).first()
+
+    if not token:
+        return _json_no_store(
+            {
+                "error": "not_found",
+                "detail": "No API token exists for this signed-in user and token key.",
+            },
+            status=404,
+        )
+
+    if not token.revoked_at:
+        token.revoked_at = timezone.now()
+        token.save(update_fields=["revoked_at"])
+
+    return _json_no_store({"token": _access_token_response(token)})
 
 
 def github_login(request):

@@ -28,3 +28,27 @@ class Profile(models.Model):
 
     def __str__(self):
         return self.display_name
+
+
+class AccessToken(models.Model):
+    provider = models.CharField(max_length=20)
+    provider_user_id = models.CharField(max_length=255)
+    name = models.CharField(max_length=80)
+    token_key = models.CharField(max_length=20, unique=True)
+    token_hash = models.CharField(max_length=64, unique=True)
+    token_suffix = models.CharField(max_length=4)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(
+                fields=["provider", "provider_user_id"],
+                name="home_api_token_owner_idx",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({self.token_key})"

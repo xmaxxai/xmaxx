@@ -127,3 +127,74 @@ class ProfileApiTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json()["error"], "validation_error")
         self.assertIn("websiteUrl", response.json()["fields"])
+
+
+class AccessTokenApiTests(TestCase):
+    def setUp(self):
+        session = self.client.session
+        session["oauth_provider"] = "github"
+        session["oauth_user"] = {
+            "id": "8675309",
+            "login": "xmaxx-operator",
+            "name": "XMAXX Operator",
+            "email": "operator@xmaxx.ai",
+            "avatar_url": "https://avatars.example/xmaxx-operator.png",
+            "profile_url": "https://github.com/xmaxx-operator",
+        }
+        session.save()
+
+    def test_access_token_create_list_and_revoke(self):
+        initial_response = self.client.get("/api/tokens/")
+
+        self.assertEqual(initial_response.status_code, 200)
+        self.assertEqual(initial_response.json(), {"tokens": []})
+
+        create_response = self.client.post(
+            "/api/tokens/",
+            data=json.dumps({"name": "CLI automation"}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(create_response.status_code, 201)
+        created_payload = create_response.json()
+        self.assertEqual(created_payload["token"]["name"], "CLI automation")
+        self.assertEqual(created_payload["token"]["status"], "active")
+        self.assertTrue(created_payload["plainTextToken"].startswith("xmaxx_xtk_"))
+        self.assertTrue(created_payload["authorizationHeader"].startswith("Bearer xmaxx_xtk_"))
+
+        token_key = created_payload["token"]["tokenKey"]
+        list_response = self.client.get("/api/tokens/")
+
+        self.assertEqual(list_response.status_code, 200)
+        self.assertEqual(len(list_response.json()["tokens"]), 1)
+        self.assertEqual(list_response.json()["tokens"][0]["tokenKey"], token_key)
+
+        revoke_response = self.client.delete(f"/api/tokens/{token_key}/")
+
+        self.assertEqual(revoke_response.status_code, 200)
+        self.assertEqual(revoke_response.json()["token"]["status"], "revoked")
+        self.assertIsNotNone(revoke_response.json()["token"]["revokedAt"])
+
+        final_list_response = self.client.get("/api/tokens/")
+
+        self.assertEqual(final_list_response.status_code, 200)
+        self.assertEqual(final_list_response.json()["tokens"][0]["status"], "revoked")
+
+    def test_access_token_requires_authenticated_session(self):
+        self.client.session.flush()
+
+        response = self.client.get("/api/tokens/")
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json()["error"], "not_authenticated")
+
+    def test_access_token_rejects_blank_name(self):
+        response = self.client.post(
+            "/api/tokens/",
+            data=json.dumps({"name": "   "}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["error"], "validation_error")
+        self.assertIn("name", response.json()["fields"])
