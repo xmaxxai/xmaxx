@@ -1139,6 +1139,7 @@ private final class MissionTranscriber {
     private var recognitionTask: SFSpeechRecognitionTask?
     private var lastTranscript = ""
     private var lastRecognitionEmission = ""
+    private var didCaptureSpeech = false
     private var silenceCommitTask: Task<Void, Never>?
     private var finalHandler: (@Sendable (String) -> Void)?
     private var didFinish = false
@@ -1167,8 +1168,9 @@ private final class MissionTranscriber {
         }
 
         stop()
-        lastTranscript = initialText.trimmingCharacters(in: .whitespacesAndNewlines)
+        lastTranscript = ""
         lastRecognitionEmission = ""
+        didCaptureSpeech = false
         finalHandler = onFinal
         didFinish = false
 
@@ -1195,10 +1197,11 @@ private final class MissionTranscriber {
                 let transcript = result.bestTranscription.formattedString.trimmingCharacters(in: .whitespacesAndNewlines)
                 let shouldRescheduleSilenceCommit = transcript != self?.lastRecognitionEmission
                 self?.lastRecognitionEmission = transcript
-                self?.lastTranscript = transcript
                 if transcript.isEmpty {
                     onUpdate(initialText)
                 } else {
+                    self?.didCaptureSpeech = true
+                    self?.lastTranscript = transcript
                     onUpdate(transcript)
                     if shouldRescheduleSilenceCommit {
                         self?.scheduleSilenceCommit(using: transcript)
@@ -1227,7 +1230,9 @@ private final class MissionTranscriber {
 
         audioEngine.reset()
         audioEngine.inputNode.removeTap(onBus: 0)
+        lastTranscript = ""
         lastRecognitionEmission = ""
+        didCaptureSpeech = false
         finalHandler = nil
         didFinish = false
     }
@@ -1250,7 +1255,12 @@ private final class MissionTranscriber {
         silenceCommitTask = nil
 
         let finalTranscript = lastTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
-        let resolvedTranscript = finalTranscript.isEmpty ? fallback : finalTranscript
+        let resolvedTranscript: String
+        if didCaptureSpeech {
+            resolvedTranscript = finalTranscript.isEmpty ? fallback : finalTranscript
+        } else {
+            resolvedTranscript = ""
+        }
         let handler = finalHandler
 
         recognitionTask?.cancel()
@@ -1265,7 +1275,9 @@ private final class MissionTranscriber {
 
         audioEngine.reset()
         audioEngine.inputNode.removeTap(onBus: 0)
+        lastTranscript = ""
         lastRecognitionEmission = ""
+        didCaptureSpeech = false
         finalHandler = nil
         handler?(resolvedTranscript)
     }
