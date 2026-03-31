@@ -294,6 +294,13 @@ private struct ControlDeckPanel: View {
                                 .fixedSize(horizontal: false, vertical: true)
                         }
 
+                        if !store.voiceAnalysisSummary.isEmpty {
+                            Text(store.voiceAnalysisSummary)
+                                .font(.system(size: 11, weight: .medium, design: .rounded))
+                                .foregroundStyle(Color(red: 0.56, green: 0.82, blue: 0.77))
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
                         Text("Turn on the microphone and keep talking naturally. The mic stays live, a short pause commits the mission, and the app ignores its own voice while it speaks.")
                             .font(.system(size: 11, weight: .medium, design: .rounded))
                             .foregroundStyle(Color.white.opacity(0.42))
@@ -1147,6 +1154,7 @@ private struct SettingsSheet: View {
     @State private var profileName: String
     @State private var chatGPTAPIKey: String
     @State private var elevenLabsAPIKey: String
+    @State private var pyannoteAPIKey: String
     @State private var audioResponsesEnabled: Bool
     @State private var audioDialogueMode: AudioDialogueMode
 
@@ -1155,6 +1163,7 @@ private struct SettingsSheet: View {
         _profileName = State(initialValue: store.profileName)
         _chatGPTAPIKey = State(initialValue: store.chatGPTAPIKey)
         _elevenLabsAPIKey = State(initialValue: store.elevenLabsAPIKey)
+        _pyannoteAPIKey = State(initialValue: store.pyannoteAPIKey)
         _audioResponsesEnabled = State(initialValue: store.audioResponsesEnabled)
         _audioDialogueMode = State(initialValue: store.audioDialogueMode)
     }
@@ -1205,6 +1214,23 @@ private struct SettingsSheet: View {
                         .foregroundStyle(Color.white.opacity(0.45))
                 }
 
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("pyannoteAI API Key")
+                        .font(.system(size: 14, weight: .bold, design: .rounded))
+                        .foregroundStyle(Color.white.opacity(0.58))
+
+                    SecureField("Enter pyannoteAI key", text: $pyannoteAPIKey)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 18, weight: .medium, design: .rounded))
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 12)
+                        .background(sheetFieldBackground)
+
+                    Text("Adds speaker diarization after each pause so the mission can include who spoke when. pyannote's public streaming page still says real-time diarization is coming soon, so this app uses the documented file-based API per utterance.")
+                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .foregroundStyle(Color.white.opacity(0.45))
+                }
+
                 Toggle(isOn: $audioResponsesEnabled) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Enable Audio Responses")
@@ -1242,7 +1268,7 @@ private struct SettingsSheet: View {
                 Spacer()
             }
             .padding(24)
-            .frame(width: 480, height: 420)
+            .frame(width: 520, height: 560)
             .background(
                 LinearGradient(
                     colors: [
@@ -1267,6 +1293,7 @@ private struct SettingsSheet: View {
                             profileName: profileName,
                             chatGPTAPIKey: chatGPTAPIKey,
                             elevenLabsAPIKey: elevenLabsAPIKey,
+                            pyannoteAPIKey: pyannoteAPIKey,
                             audioResponsesEnabled: audioResponsesEnabled,
                             audioDialogueMode: audioDialogueMode
                         )

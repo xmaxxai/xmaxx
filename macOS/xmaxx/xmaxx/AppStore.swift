@@ -149,6 +149,7 @@ final class AppStore: ObservableObject {
     @Published var profileName: String
     @Published var chatGPTAPIKey: String
     @Published var elevenLabsAPIKey: String
+    @Published var pyannoteAPIKey: String
     @Published var audioResponsesEnabled: Bool
     @Published var audioDialogueMode: AudioDialogueMode
     @Published var missionText: String
@@ -157,6 +158,7 @@ final class AppStore: ObservableObject {
     @Published var voiceLoopEnabled: Bool
     @Published var isAgentSpeaking: Bool
     @Published var recordingStatusMessage: String
+    @Published var voiceAnalysisSummary: String
     @Published var externalDialogText: String
     @Published var internalDialogText: String
     @Published var status: LoopStatus = .idle
@@ -174,10 +176,12 @@ final class AppStore: ObservableObject {
     private let keychain = KeychainStore()
     private let client = OpenAIClient()
     private let mouseExecutor = PythonMouseExecutor()
+    private let pyannoteClient = PyannoteClient()
 
     private let profileNameKey = "profileName"
     private let chatGPTAPIKeyKey = "chatGPTAPIKey"
     private let elevenLabsAPIKeyKey = "elevenLabsAPIKey"
+    private let pyannoteAPIKeyKey = "pyannoteAPIKey"
     private let audioResponsesEnabledKey = "audioResponsesEnabled"
     private let audioDialogueModeKey = "audioDialogueMode"
     private let missionTextKey = "missionText"
@@ -206,6 +210,7 @@ final class AppStore: ObservableObject {
         let storedVoiceLoopEnabled = userDefaults.object(forKey: voiceLoopEnabledKey) as? Bool ?? false
         var storedAPIKey = keychain.read(account: chatGPTAPIKeyKey) ?? ""
         var storedElevenLabsAPIKey = keychain.read(account: elevenLabsAPIKeyKey) ?? ""
+        var storedPyannoteAPIKey = keychain.read(account: pyannoteAPIKeyKey) ?? ""
         let storedAudioResponsesEnabled = userDefaults.object(forKey: audioResponsesEnabledKey) as? Bool ?? false
         let storedAudioDialogueMode = AudioDialogueMode(rawValue: userDefaults.string(forKey: audioDialogueModeKey) ?? "") ?? .external
 
@@ -221,11 +226,18 @@ final class AppStore: ObservableObject {
             userDefaults.removeObject(forKey: elevenLabsAPIKeyKey)
         }
 
+        if storedPyannoteAPIKey.isEmpty, let legacyPyannoteKey = userDefaults.string(forKey: pyannoteAPIKeyKey) {
+            storedPyannoteAPIKey = legacyPyannoteKey
+            keychain.save(legacyPyannoteKey, account: pyannoteAPIKeyKey)
+            userDefaults.removeObject(forKey: pyannoteAPIKeyKey)
+        }
+
         profileName = storedProfileName
         missionText = storedMissionText
         environmentText = storedEnvironmentText
         chatGPTAPIKey = storedAPIKey
         elevenLabsAPIKey = storedElevenLabsAPIKey
+        pyannoteAPIKey = storedPyannoteAPIKey
         audioResponsesEnabled = storedAudioResponsesEnabled
         audioDialogueMode = storedAudioDialogueMode
         operatorFeedback = storedOperatorFeedback
@@ -233,6 +245,7 @@ final class AppStore: ObservableObject {
         voiceLoopEnabled = storedVoiceLoopEnabled
         isAgentSpeaking = false
         recordingStatusMessage = "Ready to capture the mission from audio."
+        voiceAnalysisSummary = ""
         externalDialogText = "Ready to speak to the operator."
         internalDialogText = "Internal loop narration will appear here."
         maxIterations = storedMaxIterations == 0 ? 5 : min(storedMaxIterations, 12)
@@ -394,6 +407,7 @@ final class AppStore: ObservableObject {
             profileName: profileName,
             chatGPTAPIKey: chatGPTAPIKey,
             elevenLabsAPIKey: elevenLabsAPIKey,
+            pyannoteAPIKey: pyannoteAPIKey,
             audioResponsesEnabled: audioResponsesEnabled,
             audioDialogueMode: audioDialogueMode
         )
@@ -403,12 +417,14 @@ final class AppStore: ObservableObject {
         profileName: String,
         chatGPTAPIKey: String,
         elevenLabsAPIKey: String,
+        pyannoteAPIKey: String,
         audioResponsesEnabled: Bool,
         audioDialogueMode: AudioDialogueMode
     ) {
         self.profileName = profileName.trimmingCharacters(in: .whitespacesAndNewlines)
         self.chatGPTAPIKey = chatGPTAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
         self.elevenLabsAPIKey = elevenLabsAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.pyannoteAPIKey = pyannoteAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
         self.audioResponsesEnabled = audioResponsesEnabled
         self.audioDialogueMode = audioDialogueMode
 
@@ -426,6 +442,13 @@ final class AppStore: ObservableObject {
             keychain.delete(account: elevenLabsAPIKeyKey)
         } else {
             keychain.save(self.elevenLabsAPIKey, account: elevenLabsAPIKeyKey)
+        }
+
+        if self.pyannoteAPIKey.isEmpty {
+            keychain.delete(account: pyannoteAPIKeyKey)
+            voiceAnalysisSummary = ""
+        } else {
+            keychain.save(self.pyannoteAPIKey, account: pyannoteAPIKeyKey)
         }
     }
 
@@ -447,7 +470,10 @@ final class AppStore: ObservableObject {
         statusMessage = cycle.summary
     }
 
-    func runOODALoop(preserveVoiceLoop: Bool = false) {
+    func runOODALoop(
+        preserveVoiceLoop: Bool = false,
+        supplementalEnvironment: String = ""
+    ) {
         pauseMissionRecordingForProcessing()
         loopTask?.cancel()
         persistWorkspaceDraft()
@@ -455,6 +481,10 @@ final class AppStore: ObservableObject {
         let trimmedMission = missionText.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedEnvironment = environmentText.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedOperatorFeedback = operatorFeedback.trimmingCharacters(in: .whitespacesAndNewlines)
+        let runtimeEnvironment = composeEnvironment(
+            base: trimmedEnvironment,
+            supplemental: supplementalEnvironment
+        )
 
         guard !trimmedMission.isEmpty else {
             status = .failed
@@ -479,7 +509,7 @@ final class AppStore: ObservableObject {
             do {
                 try await runLoopSession(
                     mission: trimmedMission,
-                    environment: trimmedEnvironment,
+                    environment: runtimeEnvironment,
                     operatorFeedback: trimmedOperatorFeedback
                 )
             } catch {
@@ -489,6 +519,14 @@ final class AppStore: ObservableObject {
                 scheduleMissionListeningRestartIfNeeded()
             }
         }
+    }
+
+    private func composeEnvironment(base: String, supplemental: String) -> String {
+        let parts = [base, supplemental]
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        return parts.joined(separator: "\n\n")
     }
 
     func stopLoop() {
@@ -536,21 +574,16 @@ final class AppStore: ObservableObject {
                 let store = self
                 let currentMission = missionText
                 try await missionTranscriber.start(
+                    captureAudioForAnalysis: !pyannoteAPIKey.isEmpty,
                     initialText: currentMission,
                     onUpdate: { transcript in
                         Task { @MainActor in
                             store.missionText = transcript
                         }
                     },
-                    onFinal: { transcript in
+                    onFinal: { capture in
                         Task { @MainActor in
-                            let trimmedTranscript = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
-
-                            if !trimmedTranscript.isEmpty {
-                                store.missionText = trimmedTranscript
-                                store.recordingStatusMessage = "Mission captured. Running x-maxx."
-                                store.runOODALoop(preserveVoiceLoop: true)
-                            }
+                            await store.processCapturedMission(capture)
                         }
                     }
                 )
@@ -587,6 +620,51 @@ final class AppStore: ObservableObject {
         if voiceLoopEnabled {
             recordingStatusMessage = "Processing mission. Mic stays live."
         }
+    }
+
+    private func processCapturedMission(_ capture: MissionCapture) async {
+        let trimmedTranscript = capture.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTranscript.isEmpty else {
+            capture.deleteTemporaryAudioFileIfNeeded()
+            return
+        }
+
+        pauseMissionRecordingForProcessing()
+
+        var resolvedMission = trimmedTranscript
+        var resolvedVoiceContext = ""
+
+        defer {
+            capture.deleteTemporaryAudioFileIfNeeded()
+        }
+
+        if !pyannoteAPIKey.isEmpty, let audioFileURL = capture.audioFileURL {
+            recordingStatusMessage = "Mission captured. Analyzing speakers with pyannote."
+
+            do {
+                let analysis = try await pyannoteClient.analyzeUtterance(
+                    audioFileURL: audioFileURL,
+                    apiKey: pyannoteAPIKey
+                )
+                if !analysis.missionTranscript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    resolvedMission = analysis.missionTranscript
+                }
+                resolvedVoiceContext = analysis.loopContext
+                voiceAnalysisSummary = analysis.summary
+            } catch {
+                voiceAnalysisSummary = "pyannote analysis unavailable. Using local speech transcript."
+                recordingStatusMessage = "pyannote unavailable. Running x-maxx with local transcript."
+            }
+        } else {
+            voiceAnalysisSummary = pyannoteAPIKey.isEmpty ? "" : "Local speech transcript captured."
+        }
+
+        missionText = resolvedMission
+        recordingStatusMessage = "Mission captured. Running x-maxx."
+        runOODALoop(
+            preserveVoiceLoop: true,
+            supplementalEnvironment: resolvedVoiceContext
+        )
     }
 
     private func runLoopSession(
@@ -1143,11 +1221,22 @@ print(f"\(tool) executed at ({x:.1f}, {y:.1f})")
     }
 }
 
+private struct MissionCapture {
+    let transcript: String
+    let audioFileURL: URL?
+
+    func deleteTemporaryAudioFileIfNeeded() {
+        guard let audioFileURL else { return }
+        try? FileManager.default.removeItem(at: audioFileURL)
+    }
+}
+
 private final class MissionTranscriber {
     private let silenceCommitDelayNanoseconds: UInt64 = 500_000_000
     private let playbackEchoFilterDuration: TimeInterval = 1.2
     private let audioEngine = AVAudioEngine()
     private let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
+    private let audioCaptureQueue = DispatchQueue(label: "AthenaLive.xmaxx.audioCapture")
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
     private var lastTranscript = ""
@@ -1156,18 +1245,23 @@ private final class MissionTranscriber {
     private var silenceCommitTask: Task<Void, Never>?
     private var resumeDeliveryTask: Task<Void, Never>?
     private var updateHandler: (@Sendable (String) -> Void)?
-    private var finalHandler: (@Sendable (String) -> Void)?
+    private var finalHandler: (@Sendable (MissionCapture) -> Void)?
     private var isRunning = false
     private var isSegmentDeliveryEnabled = true
     private var deliveryModeVersion: UInt64 = 0
     private var recognitionSessionVersion: UInt64 = 0
     private var playbackEchoReference = ""
     private var playbackEchoDeadline = Date.distantPast
+    private var captureAudioForAnalysis = false
+    private var currentUtterancePCM = Data()
+    private var currentUtteranceSampleRate: Double = 16_000
+    private var currentUtteranceChannelCount: UInt16 = 1
 
     func start(
+        captureAudioForAnalysis: Bool,
         initialText: String,
         onUpdate: @escaping @Sendable (String) -> Void,
-        onFinal: @escaping @Sendable (String) -> Void
+        onFinal: @escaping @Sendable (MissionCapture) -> Void
     ) async throws {
         guard let recognizer else {
             throw MissionTranscriberError.unavailable
@@ -1191,14 +1285,18 @@ private final class MissionTranscriber {
         lastTranscript = ""
         lastRecognitionEmission = ""
         didCaptureSpeech = false
+        self.captureAudioForAnalysis = captureAudioForAnalysis
         updateHandler = onUpdate
         finalHandler = onFinal
 
         let inputNode = audioEngine.inputNode
         let format = inputNode.outputFormat(forBus: 0)
+        currentUtteranceSampleRate = format.sampleRate
+        currentUtteranceChannelCount = 1
         inputNode.removeTap(onBus: 0)
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
             self?.recognitionRequest?.append(buffer)
+            self?.captureAudioBufferIfNeeded(buffer)
         }
 
         audioEngine.prepare()
@@ -1239,6 +1337,10 @@ private final class MissionTranscriber {
         deliveryModeVersion &+= 1
         playbackEchoReference = ""
         playbackEchoDeadline = .distantPast
+        captureAudioForAnalysis = false
+        audioCaptureQueue.sync {
+            currentUtterancePCM.removeAll(keepingCapacity: false)
+        }
     }
 
     func suspendSegmentDelivery() {
@@ -1363,10 +1465,14 @@ private final class MissionTranscriber {
 
         let finalTranscript = lastTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
         let resolvedTranscript = didCaptureSpeech ? (finalTranscript.isEmpty ? fallback.trimmingCharacters(in: .whitespacesAndNewlines) : finalTranscript) : ""
+        let audioFileURL = didCaptureSpeech ? makeAudioCaptureFileIfAvailable() : nil
         resetCurrentUtterance()
 
         guard isSegmentDeliveryEnabled, !resolvedTranscript.isEmpty else { return }
-        finalHandler?(resolvedTranscript)
+        finalHandler?(MissionCapture(
+            transcript: resolvedTranscript,
+            audioFileURL: audioFileURL
+        ))
     }
 
     private func resetCurrentUtterance() {
@@ -1375,6 +1481,101 @@ private final class MissionTranscriber {
         lastTranscript = ""
         lastRecognitionEmission = ""
         didCaptureSpeech = false
+        audioCaptureQueue.sync {
+            currentUtterancePCM.removeAll(keepingCapacity: false)
+        }
+    }
+
+    private func captureAudioBufferIfNeeded(_ buffer: AVAudioPCMBuffer) {
+        guard captureAudioForAnalysis, isSegmentDeliveryEnabled, buffer.frameLength > 0 else { return }
+
+        let frameCount = Int(buffer.frameLength)
+        var pcmChunk = Data(count: frameCount * MemoryLayout<Int16>.size)
+
+        pcmChunk.withUnsafeMutableBytes { rawBuffer in
+            let pcmSamples = rawBuffer.bindMemory(to: Int16.self)
+
+            if let floatChannelData = buffer.floatChannelData {
+                let source = floatChannelData[0]
+                for index in 0..<frameCount {
+                    let clampedSample = max(-1.0, min(1.0, source[index]))
+                    pcmSamples[index] = Int16(clampedSample * Float(Int16.max)).littleEndian
+                }
+            } else if let int16ChannelData = buffer.int16ChannelData {
+                let source = int16ChannelData[0]
+                for index in 0..<frameCount {
+                    pcmSamples[index] = source[index].littleEndian
+                }
+            } else if let int32ChannelData = buffer.int32ChannelData {
+                let source = int32ChannelData[0]
+                for index in 0..<frameCount {
+                    let shiftedSample = source[index] >> 16
+                    let clampedSample = max(Int32(Int16.min), min(Int32(Int16.max), shiftedSample))
+                    pcmSamples[index] = Int16(clampedSample).littleEndian
+                }
+            }
+        }
+
+        audioCaptureQueue.async { [weak self] in
+            self?.currentUtterancePCM.append(pcmChunk)
+        }
+    }
+
+    private func makeAudioCaptureFileIfAvailable() -> URL? {
+        guard captureAudioForAnalysis else { return nil }
+
+        let pcmData = audioCaptureQueue.sync { currentUtterancePCM }
+        guard !pcmData.isEmpty else { return nil }
+
+        let fileURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("xmaxx-utterance-\(UUID().uuidString)")
+            .appendingPathExtension("wav")
+
+        do {
+            let wavData = try makeWAVData(
+                pcmData: pcmData,
+                sampleRate: currentUtteranceSampleRate,
+                channelCount: currentUtteranceChannelCount
+            )
+            try wavData.write(to: fileURL, options: .atomic)
+            return fileURL
+        } catch {
+            return nil
+        }
+    }
+
+    private func makeWAVData(
+        pcmData: Data,
+        sampleRate: Double,
+        channelCount: UInt16
+    ) throws -> Data {
+        let bitsPerSample: UInt16 = 16
+        let byteRate = UInt32(sampleRate) * UInt32(channelCount) * UInt32(bitsPerSample / 8)
+        let blockAlign = channelCount * (bitsPerSample / 8)
+        let dataChunkSize = UInt32(pcmData.count)
+        let riffChunkSize = 36 + dataChunkSize
+
+        var wavData = Data()
+        wavData.append("RIFF".data(using: .ascii) ?? Data())
+        wavData.append(littleEndianData(riffChunkSize))
+        wavData.append("WAVE".data(using: .ascii) ?? Data())
+        wavData.append("fmt ".data(using: .ascii) ?? Data())
+        wavData.append(littleEndianData(UInt32(16)))
+        wavData.append(littleEndianData(UInt16(1)))
+        wavData.append(littleEndianData(channelCount))
+        wavData.append(littleEndianData(UInt32(sampleRate.rounded())))
+        wavData.append(littleEndianData(byteRate))
+        wavData.append(littleEndianData(blockAlign))
+        wavData.append(littleEndianData(bitsPerSample))
+        wavData.append("data".data(using: .ascii) ?? Data())
+        wavData.append(littleEndianData(dataChunkSize))
+        wavData.append(pcmData)
+        return wavData
+    }
+
+    private func littleEndianData<T: FixedWidthInteger>(_ value: T) -> Data {
+        var littleEndianValue = value.littleEndian
+        return Data(bytes: &littleEndianValue, count: MemoryLayout<T>.size)
     }
 
     private func configurePlaybackEchoFilter(using reference: String) {
@@ -1454,6 +1655,289 @@ private enum MissionTranscriberError: LocalizedError {
             return "Speech recognition permission was denied."
         case .microphonePermissionDenied:
             return "Microphone permission was denied."
+        }
+    }
+}
+
+private struct PyannoteUtteranceAnalysis {
+    let missionTranscript: String
+    let loopContext: String
+    let summary: String
+}
+
+private actor PyannoteClient {
+    private struct MediaUploadRequest: Encodable {
+        let url: String
+    }
+
+    private struct MediaUploadResponse: Decodable {
+        let url: String
+    }
+
+    private struct DiarizeRequest: Encodable {
+        let url: String
+        let model: String
+        let exclusive: Bool
+        let transcription: Bool
+    }
+
+    private struct JobCreateResponse: Decodable {
+        let jobId: String
+        let status: String
+        let warning: String?
+    }
+
+    private struct JobResponse: Decodable {
+        let jobId: String
+        let status: String
+        let warning: String?
+        let output: JobOutput?
+    }
+
+    private struct JobOutput: Decodable {
+        let diarization: [SpeakerSegment]?
+        let exclusiveDiarization: [SpeakerSegment]?
+        let turnLevelTranscription: [SpeechTurn]?
+        let error: String?
+        let warning: String?
+    }
+
+    private struct SpeakerSegment: Decodable {
+        let speaker: String
+        let start: Double
+        let end: Double
+    }
+
+    private struct SpeechTurn: Decodable {
+        let start: Double
+        let end: Double
+        let text: String
+        let speaker: String
+    }
+
+    private let session = URLSession.shared
+    private let baseURL = URL(string: "https://api.pyannote.ai/v1")!
+
+    func analyzeUtterance(audioFileURL: URL, apiKey: String) async throws -> PyannoteUtteranceAnalysis {
+        let objectKey = "xmaxx/\(UUID().uuidString).wav"
+        let mediaURL = "media://\(objectKey)"
+
+        let uploadURL = try await createUploadURL(mediaURL: mediaURL, apiKey: apiKey)
+        try await uploadAudioFile(audioFileURL, uploadURL: uploadURL)
+
+        let jobID = try await submitDiarizationJob(mediaURL: mediaURL, apiKey: apiKey)
+        let job = try await pollJobUntilFinished(jobID: jobID, apiKey: apiKey)
+        return try makeAnalysis(from: job)
+    }
+
+    private func createUploadURL(mediaURL: String, apiKey: String) async throws -> URL {
+        let endpoint = baseURL.appending(path: "media/input")
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.httpBody = try JSONEncoder().encode(MediaUploadRequest(url: mediaURL))
+
+        let response: MediaUploadResponse = try await performJSONRequest(request, acceptedStatusCodes: 200...299)
+
+        guard let uploadURL = URL(string: response.url) else {
+            throw PyannoteError.invalidResponse
+        }
+
+        return uploadURL
+    }
+
+    private func uploadAudioFile(_ audioFileURL: URL, uploadURL: URL) async throws {
+        var request = URLRequest(url: uploadURL)
+        request.httpMethod = "PUT"
+        request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+
+        do {
+            let (_, response) = try await session.upload(for: request, fromFile: audioFileURL)
+            guard let httpResponse = response as? HTTPURLResponse else {
+                throw PyannoteError.invalidResponse
+            }
+
+            guard (200...299).contains(httpResponse.statusCode) else {
+                throw PyannoteError.apiError("pyannote media upload failed with status \(httpResponse.statusCode).")
+            }
+        } catch let error as URLError {
+            throw PyannoteError.network(error)
+        }
+    }
+
+    private func submitDiarizationJob(mediaURL: String, apiKey: String) async throws -> String {
+        let endpoint = baseURL.appending(path: "diarize")
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.httpBody = try JSONEncoder().encode(
+            DiarizeRequest(
+                url: mediaURL,
+                model: "precision-2",
+                exclusive: true,
+                transcription: true
+            )
+        )
+
+        let response: JobCreateResponse = try await performJSONRequest(request, acceptedStatusCodes: 200...299)
+        return response.jobId
+    }
+
+    private func pollJobUntilFinished(jobID: String, apiKey: String) async throws -> JobResponse {
+        let deadline = Date().addingTimeInterval(25)
+
+        while Date() < deadline {
+            let job = try await fetchJob(jobID: jobID, apiKey: apiKey)
+
+            switch job.status {
+            case "succeeded":
+                return job
+            case "failed":
+                throw PyannoteError.jobFailed(job.output?.error ?? job.warning ?? "pyannote diarization job failed.")
+            case "canceled":
+                throw PyannoteError.jobFailed("pyannote diarization job was canceled.")
+            default:
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+            }
+        }
+
+        throw PyannoteError.timedOut
+    }
+
+    private func fetchJob(jobID: String, apiKey: String) async throws -> JobResponse {
+        let endpoint = baseURL.appending(path: "jobs/\(jobID)")
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "GET"
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        return try await performJSONRequest(request, acceptedStatusCodes: 200...299)
+    }
+
+    private func performJSONRequest<Response: Decodable>(
+        _ request: URLRequest,
+        acceptedStatusCodes: ClosedRange<Int>
+    ) async throws -> Response {
+        let (data, response): (Data, URLResponse)
+
+        do {
+            (data, response) = try await session.data(for: request)
+        } catch let error as URLError {
+            throw PyannoteError.network(error)
+        }
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw PyannoteError.invalidResponse
+        }
+
+        guard acceptedStatusCodes.contains(httpResponse.statusCode) else {
+            let apiMessage = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            throw PyannoteError.apiError(apiMessage?.isEmpty == false ? apiMessage! : "pyannote request failed with status \(httpResponse.statusCode).")
+        }
+
+        do {
+            return try JSONDecoder().decode(Response.self, from: data)
+        } catch {
+            throw PyannoteError.invalidResponse
+        }
+    }
+
+    private func makeAnalysis(from job: JobResponse) throws -> PyannoteUtteranceAnalysis {
+        guard let output = job.output else {
+            throw PyannoteError.missingResult
+        }
+
+        let turns = (output.turnLevelTranscription ?? [])
+            .map {
+                SpeechTurn(
+                    start: $0.start,
+                    end: $0.end,
+                    text: $0.text.trimmingCharacters(in: .whitespacesAndNewlines),
+                    speaker: $0.speaker
+                )
+            }
+            .filter { !$0.text.isEmpty }
+
+        let timingSegments = output.exclusiveDiarization ?? output.diarization ?? []
+        let speakerDurations = timingSegments.reduce(into: [String: Double]()) { partialResult, segment in
+            partialResult[segment.speaker, default: 0] += max(0, segment.end - segment.start)
+        }
+
+        let sortedSpeakers = speakerDurations
+            .sorted { lhs, rhs in
+                if lhs.value == rhs.value {
+                    return lhs.key < rhs.key
+                }
+                return lhs.value > rhs.value
+            }
+            .map(\.key)
+
+        let dominantSpeaker = sortedSpeakers.first
+        let speakerCount = max(sortedSpeakers.count, Set(turns.map(\.speaker)).count)
+
+        let missionTranscript: String
+        if turns.isEmpty {
+            missionTranscript = ""
+        } else if Set(turns.map(\.speaker)).count <= 1 {
+            missionTranscript = turns.map(\.text).joined(separator: " ")
+        } else {
+            missionTranscript = turns
+                .map { turn in
+                    "\(turn.speaker) (\(formatTimestamp(turn.start))-\(formatTimestamp(turn.end))): \(turn.text)"
+                }
+                .joined(separator: "\n")
+        }
+
+        let loopContext = """
+        Recent voice analysis from pyannoteAI:
+        Speakers detected: \(max(1, speakerCount))
+        Dominant speaker: \(dominantSpeaker ?? "unknown")
+        Speaker order by activity: \(sortedSpeakers.isEmpty ? "unknown" : sortedSpeakers.joined(separator: ", "))
+        Speaker-attributed transcript:
+        \(missionTranscript.isEmpty ? "Unavailable" : missionTranscript)
+        """
+
+        let summary = speakerCount > 1
+            ? "pyannote detected \(speakerCount) speakers and attached speaker turns."
+            : "pyannote detected one active speaker."
+
+        return PyannoteUtteranceAnalysis(
+            missionTranscript: missionTranscript,
+            loopContext: loopContext,
+            summary: summary
+        )
+    }
+
+    private func formatTimestamp(_ seconds: Double) -> String {
+        let totalSeconds = max(Int(seconds.rounded(.down)), 0)
+        let minutes = totalSeconds / 60
+        let remainder = totalSeconds % 60
+        return "\(minutes):" + String(format: "%02d", remainder)
+    }
+}
+
+private enum PyannoteError: LocalizedError {
+    case invalidResponse
+    case network(URLError)
+    case apiError(String)
+    case jobFailed(String)
+    case missingResult
+    case timedOut
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidResponse:
+            return "pyannote returned an invalid response."
+        case let .network(error):
+            return error.xmaxxDescription(for: "pyannote")
+        case let .apiError(message):
+            return message
+        case let .jobFailed(message):
+            return message
+        case .missingResult:
+            return "pyannote finished without a usable diarization result."
+        case .timedOut:
+            return "pyannote diarization timed out before finishing."
         }
     }
 }
