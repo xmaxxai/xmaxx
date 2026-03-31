@@ -11,7 +11,7 @@ const homeNavLinks = [
 
 const accountNavLinks = [
   { href: '/profile', label: 'Profile', page: 'profile' },
-  { href: '/api-access', label: 'API Access', page: 'api-access' },
+  { href: '/access-tokens', label: 'API Access', page: 'access-tokens' },
 ]
 
 const heroStats = [
@@ -249,8 +249,8 @@ function getCurrentPage() {
     return 'profile'
   }
 
-  if (pathname === '/api-access') {
-    return 'api-access'
+  if (pathname === '/access-tokens') {
+    return 'access-tokens'
   }
 
   return 'home'
@@ -871,7 +871,7 @@ function App() {
       <main className="page-shell">
         {currentPage === 'profile' ? (
           <ProfilePage authState={authState} onOpenLogin={handleOpenLogin} />
-        ) : currentPage === 'api-access' ? (
+        ) : currentPage === 'access-tokens' ? (
           <ApiTokensPage authState={authState} onOpenLogin={handleOpenLogin} />
         ) : (
           <>
