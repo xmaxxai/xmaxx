@@ -1,13 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
-import { ProfileWorkspace } from './components/ProfileWorkspace'
+import { ApiTokensPage, ProfilePage } from './components/ProfileWorkspace'
 import './index.css'
 
-const navLinks = [
+const homeNavLinks = [
   { href: '#overview', label: 'Overview' },
   { href: '#specs', label: 'Specs' },
   { href: '#modes', label: 'Modes' },
-  { href: '#profile', label: 'Profile' },
   { href: '#security', label: 'Security' },
+]
+
+const accountNavLinks = [
+  { href: '/profile', label: 'Profile', page: 'profile' },
+  { href: '/api-access', label: 'API Access', page: 'api-access' },
 ]
 
 const heroStats = [
@@ -233,6 +237,39 @@ function getProviderStatusCopy(provider, configuredReason) {
   return getAuthErrorMessage(provider, configuredReason)
 }
 
+// Keep account tooling on standalone routes so the landing page stays focused.
+function getCurrentPage() {
+  if (typeof window === 'undefined') {
+    return 'home'
+  }
+
+  const pathname = window.location.pathname.replace(/\/+$/, '') || '/'
+
+  if (pathname === '/profile') {
+    return 'profile'
+  }
+
+  if (pathname === '/api-access') {
+    return 'api-access'
+  }
+
+  return 'home'
+}
+
+function getSiteNavLinks(currentPage) {
+  if (currentPage === 'home') {
+    return [
+      ...homeNavLinks.map((link) => ({ ...link, page: 'home' })),
+      ...accountNavLinks,
+    ]
+  }
+
+  return [
+    { href: '/', label: 'Home', page: 'home' },
+    ...accountNavLinks,
+  ]
+}
+
 function buildAuthReturnPath() {
   if (typeof window === 'undefined') {
     return '/'
@@ -427,9 +464,7 @@ function AuthControls({
       <div className={className}>
         <a
           className="session-pill session-pill--link"
-          href={authState.user.profile_url || '#overview'}
-          target="_blank"
-          rel="noreferrer"
+          href="/profile"
         >
           {authState.user.avatar_url ? (
             <img
@@ -679,6 +714,8 @@ function SpecCard({ id, title, description, rows, items, ledStates }) {
 }
 
 function App() {
+  const currentPage = getCurrentPage()
+  const siteNavLinks = getSiteNavLinks(currentPage)
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false)
   const [authNotice, setAuthNotice] = useState(() => readAuthNotice())
   const [authState, setAuthState] = useState(buildInitialAuthState)
@@ -803,14 +840,18 @@ function App() {
       <div className="ambient ambient--right" />
 
       <header className="site-header">
-        <a className="brand" href="#overview" aria-label="XMAXX home">
+        <a className="brand" href={currentPage === 'home' ? '#overview' : '/'} aria-label="XMAXX home">
           <span className="brand__mark">XMAXX</span>
           <span className="brand__sub">Core Unit</span>
         </a>
 
         <nav className="site-nav" aria-label="Page sections">
-          {navLinks.map(({ href, label }) => (
-            <a key={href} href={href}>
+          {siteNavLinks.map(({ href, label, page }) => (
+            <a
+              key={href}
+              href={href}
+              aria-current={!href.startsWith('#') && currentPage === page ? 'page' : undefined}
+            >
               {label}
             </a>
           ))}
@@ -828,119 +869,125 @@ function App() {
       </header>
 
       <main className="page-shell">
-        <section className="hero-panel" id="overview">
-          <div className="hero-copy">
-            <p className="eyebrow">Computer-Use Agent Hardware — XMAXX Core Unit</p>
-            <h1>The most clever computer ever made.</h1>
-            <p className="hero-copy__lede">
-              Built to see, reason, and operate software for you. Join the
-              community. Own one today.
-            </p>
+        {currentPage === 'profile' ? (
+          <ProfilePage authState={authState} onOpenLogin={handleOpenLogin} />
+        ) : currentPage === 'api-access' ? (
+          <ApiTokensPage authState={authState} onOpenLogin={handleOpenLogin} />
+        ) : (
+          <>
+            <section className="hero-panel" id="overview">
+              <div className="hero-copy">
+                <p className="eyebrow">Computer-Use Agent Hardware — XMAXX Core Unit</p>
+                <h1>The most clever computer ever made.</h1>
+                <p className="hero-copy__lede">
+                  Built to see, reason, and operate software for you. Join the
+                  community. Own one today.
+                </p>
 
-            <div className="verb-strip" aria-label="System purpose">
-              <span>See</span>
-              <span>Reason</span>
-              <span>Operate</span>
-            </div>
+                <div className="verb-strip" aria-label="System purpose">
+                  <span>See</span>
+                  <span>Reason</span>
+                  <span>Operate</span>
+                </div>
 
-            <AccessPanel
-              authState={authState}
-              notice={authNotice}
-              onOpenLogin={handleOpenLogin}
-              onLogout={handleLogout}
-              busyProvider={authBusyProvider}
-            />
+                <AccessPanel
+                  authState={authState}
+                  notice={authNotice}
+                  onOpenLogin={handleOpenLogin}
+                  onLogout={handleLogout}
+                  busyProvider={authBusyProvider}
+                />
 
-            <div className="hero-stats">
-              {heroStats.map(({ label, value, detail }) => (
-                <article className="hero-stat" key={label}>
-                  <p>{label}</p>
-                  <strong>{value}</strong>
-                  <span>{detail}</span>
-                </article>
-              ))}
-            </div>
-          </div>
-
-          <div className="hero-visual">
-            <div className="hero-visual__frame">
-              <img
-                src="/waterbox.png"
-                alt="XMAXX Core Unit in stealth black with blue LED perimeter strip"
-              />
-            </div>
-
-            <div className="hero-visual__meta">
-              <div>
-                <p className="section-kicker">Hardware Envelope</p>
-                <h2>Computer-use agent. Fanless core. Physical deployment.</h2>
+                <div className="hero-stats">
+                  {heroStats.map(({ label, value, detail }) => (
+                    <article className="hero-stat" key={label}>
+                      <p>{label}</p>
+                      <strong>{value}</strong>
+                      <span>{detail}</span>
+                    </article>
+                  ))}
+                </div>
               </div>
 
-              <div className="hardware-highlights">
-                {hardwareHighlights.map((item) => (
-                  <span key={item}>{item}</span>
+              <div className="hero-visual">
+                <div className="hero-visual__frame">
+                  <img
+                    src="/waterbox.png"
+                    alt="XMAXX Core Unit in stealth black with blue LED perimeter strip"
+                  />
+                </div>
+
+                <div className="hero-visual__meta">
+                  <div>
+                    <p className="section-kicker">Hardware Envelope</p>
+                    <h2>Computer-use agent. Fanless core. Physical deployment.</h2>
+                  </div>
+
+                  <div className="hardware-highlights">
+                    {hardwareHighlights.map((item) => (
+                      <span key={item}>{item}</span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section className="positioning-band">
+              <p className="eyebrow">Positioning</p>
+              <div className="positioning-band__copy">
+                <p>
+                  XMAXX Core Unit is AI agent hardware built for computer
+                  operation: a persistent box that can interpret an interface, move
+                  through workflows, and execute actions with controlled autonomy.
+                </p>
+                <p>
+                  Instead of stitching together scripts and remote sessions, XMAXX
+                  turns an agent that can operate a computer into a reliable
+                  physical product.
+                </p>
+              </div>
+            </section>
+
+            <section className="section-block" id="specs">
+              <div className="section-heading">
+                <p className="eyebrow">Specification Matrix</p>
+                <h2>Hardware, runtime, and security posture in one surface.</h2>
+              </div>
+
+              <div className="spec-grid">
+                {specSections.map((section) => (
+                  <SpecCard key={section.title} {...section} />
                 ))}
               </div>
-            </div>
-          </div>
-        </section>
+            </section>
 
-        <section className="positioning-band">
-          <p className="eyebrow">Positioning</p>
-          <div className="positioning-band__copy">
-            <p>
-              XMAXX Core Unit is AI agent hardware built for computer
-              operation: a persistent box that can interpret an interface, move
-              through workflows, and execute actions with controlled autonomy.
-            </p>
-            <p>
-              Instead of stitching together scripts and remote sessions, XMAXX
-              turns an agent that can operate a computer into a reliable
-              physical product.
-            </p>
-          </div>
-        </section>
+            <section className="section-block" id="modes">
+              <div className="section-heading">
+                <p className="eyebrow">Use Case Modes</p>
+                <h2>Deploy as a personal node, a clustered network member, or a builder platform.</h2>
+              </div>
 
-        <section className="section-block" id="specs">
-          <div className="section-heading">
-            <p className="eyebrow">Specification Matrix</p>
-            <h2>Hardware, runtime, and security posture in one surface.</h2>
-          </div>
+              <div className="mode-grid">
+                {modes.map(({ title, body }) => (
+                  <article className="mode-card" key={title}>
+                    <p className="section-kicker">Mode</p>
+                    <h3>{title}</h3>
+                    <p>{body}</p>
+                  </article>
+                ))}
+              </div>
+            </section>
 
-          <div className="spec-grid">
-            {specSections.map((section) => (
-              <SpecCard key={section.title} {...section} />
-            ))}
-          </div>
-        </section>
-
-        <section className="section-block" id="modes">
-          <div className="section-heading">
-            <p className="eyebrow">Use Case Modes</p>
-            <h2>Deploy as a personal node, a clustered network member, or a builder platform.</h2>
-          </div>
-
-          <div className="mode-grid">
-            {modes.map(({ title, body }) => (
-              <article className="mode-card" key={title}>
-                <p className="section-kicker">Mode</p>
-                <h3>{title}</h3>
-                <p>{body}</p>
-              </article>
-            ))}
-          </div>
-        </section>
-
-        <ProfileWorkspace authState={authState} onOpenLogin={() => setIsAuthModalOpen(true)} />
-
-        <section className="closing-panel">
-          <p className="eyebrow">Operating Statement</p>
-          <h2>Computer-use AI, delivered as hardware.</h2>
-          <p>
-            XMAXX Core Unit is designed to stay on, stay quiet, and run
-            computer-level actions from a persistent local-first agent runtime.
-          </p>
-        </section>
+            <section className="closing-panel">
+              <p className="eyebrow">Operating Statement</p>
+              <h2>Computer-use AI, delivered as hardware.</h2>
+              <p>
+                XMAXX Core Unit is designed to stay on, stay quiet, and run
+                computer-level actions from a persistent local-first agent runtime.
+              </p>
+            </section>
+          </>
+        )}
       </main>
 
       <AuthModal
