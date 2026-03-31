@@ -9,6 +9,7 @@ import Combine
 import Foundation
 import Security
 import ApplicationServices
+import CoreServices
 import AVFoundation
 import Speech
 
@@ -366,6 +367,10 @@ final class AppStore: ObservableObject {
 
         Task { @MainActor in
             SystemPermissionPrompter.triggerAccessibilityPromptIfNeeded()
+        }
+
+        Task.detached(priority: .utility) {
+            SystemPermissionPrompter.triggerAutomationPrompt(forBundleIdentifier: "com.apple.finder")
             SystemPermissionPrompter.triggerAutomationPrompt()
         }
     }
@@ -1386,7 +1391,7 @@ extension SpeechCoordinator: AVSpeechSynthesizerDelegate, AVAudioPlayerDelegate 
 }
 
 private enum SystemPermissionPrompter {
-    static func triggerAccessibilityPromptIfNeeded() {
+    nonisolated static func triggerAccessibilityPromptIfNeeded() {
         let options = [
             kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true
         ] as CFDictionary
@@ -1394,7 +1399,17 @@ private enum SystemPermissionPrompter {
         _ = AXIsProcessTrustedWithOptions(options)
     }
 
-    static func triggerAutomationPrompt() {
+    nonisolated static func triggerAutomationPrompt(forBundleIdentifier bundleIdentifier: String) {
+        let descriptor = NSAppleEventDescriptor(bundleIdentifier: bundleIdentifier)
+        _ = AEDeterminePermissionToAutomateTarget(
+            descriptor.aeDesc,
+            AEEventClass(typeWildCard),
+            AEEventID(typeWildCard),
+            true
+        )
+    }
+
+    nonisolated static func triggerAutomationPrompt() {
         let source = """
         tell application "System Events"
             return name of first process whose frontmost is true
