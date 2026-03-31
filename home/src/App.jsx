@@ -829,12 +829,12 @@ function App() {
         <section className="hero-panel" id="overview">
           <div className="hero-copy">
             <p className="eyebrow">Computer-Use Agent Hardware — XMAXX Core Unit</p>
-            <h1>AI agent hardware that can operate a computer.</h1>
+            <h1>A new class of AI agent, built in hardware to operate a computer.</h1>
             <p className="hero-copy__lede">
-              XMAXX Core Unit packages a local-first computer-use agent into
-              dedicated hardware, giving one operator a physical system that
-              can see the interface, reason through tasks, and take action
-              across real software environments.
+              XMAXX Core Unit turns computer-use AI into a physical product:
+              a quiet, local-first system that can see the interface,
+              understand context, and take action across real software
+              environments.
             </p>
 
             <div className="verb-strip" aria-label="System purpose">
@@ -873,7 +873,7 @@ function App() {
             <div className="hero-visual__meta">
               <div>
                 <p className="section-kicker">Hardware Envelope</p>
-                <h2>Computer-use agent. Fanless core. Physical deployment.</h2>
+                <h2>Computer-use AI. Fanless core. Built for the real world.</h2>
               </div>
 
               <div className="hardware-highlights">
@@ -889,14 +889,14 @@ function App() {
           <p className="eyebrow">Positioning</p>
           <div className="positioning-band__copy">
             <p>
-              XMAXX Core Unit is AI agent hardware built for computer
-              operation: a persistent box that can interpret an interface, move
+              XMAXX Core Unit is AI agent hardware for computer operation:
+              a persistent machine that can interpret an interface, move
               through workflows, and execute actions with controlled autonomy.
             </p>
             <p>
-              Instead of stitching together scripts and remote sessions, XMAXX
-              turns an agent that can operate a computer into a reliable
-              physical product.
+              Instead of stitching together scripts, browser tabs, and remote
+              sessions, XMAXX turns computer-use AI into a reliable physical
+              product.
             </p>
           </div>
         </section>
@@ -933,7 +933,7 @@ function App() {
 
         <section className="closing-panel">
           <p className="eyebrow">Operating Statement</p>
-          <h2>Computer-use AI, delivered as hardware.</h2>
+          <h2>Computer-use AI, made physical.</h2>
           <p>
             XMAXX Core Unit is designed to stay on, stay quiet, and run
             computer-level actions from a persistent local-first agent runtime.
