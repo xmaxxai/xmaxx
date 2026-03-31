@@ -1133,6 +1133,7 @@ print(f"\(tool) executed at ({x:.1f}, {y:.1f})")
 }
 
 private final class MissionTranscriber {
+    private let silenceCommitDelayNanoseconds: UInt64 = 500_000_000
     private let audioEngine = AVAudioEngine()
     private let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
@@ -1241,9 +1242,10 @@ private final class MissionTranscriber {
         silenceCommitTask?.cancel()
 
         silenceCommitTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 1_100_000_000)
+            guard let self else { return }
+            try? await Task.sleep(nanoseconds: self.silenceCommitDelayNanoseconds)
             guard !Task.isCancelled else { return }
-            self?.finish(withFallback: transcript)
+            self.finish(withFallback: transcript)
         }
     }
 
