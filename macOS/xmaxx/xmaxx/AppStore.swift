@@ -1138,6 +1138,7 @@ private final class MissionTranscriber {
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
     private var lastTranscript = ""
+    private var lastRecognitionEmission = ""
     private var silenceCommitTask: Task<Void, Never>?
     private var finalHandler: (@Sendable (String) -> Void)?
     private var didFinish = false
@@ -1167,6 +1168,7 @@ private final class MissionTranscriber {
 
         stop()
         lastTranscript = initialText.trimmingCharacters(in: .whitespacesAndNewlines)
+        lastRecognitionEmission = ""
         finalHandler = onFinal
         didFinish = false
 
@@ -1193,12 +1195,16 @@ private final class MissionTranscriber {
         recognitionTask = recognizer.recognitionTask(with: request) { [weak self] result, error in
             if let result {
                 let transcript = result.bestTranscription.formattedString.trimmingCharacters(in: .whitespacesAndNewlines)
+                let shouldRescheduleSilenceCommit = transcript != self?.lastRecognitionEmission
+                self?.lastRecognitionEmission = transcript
                 self?.lastTranscript = transcript
                 if transcript.isEmpty {
                     onUpdate(initialText)
                 } else {
                     onUpdate(transcript)
-                    self?.scheduleSilenceCommit(using: transcript)
+                    if shouldRescheduleSilenceCommit {
+                        self?.scheduleSilenceCommit(using: transcript)
+                    }
                 }
             }
 
@@ -1223,6 +1229,7 @@ private final class MissionTranscriber {
 
         audioEngine.reset()
         audioEngine.inputNode.removeTap(onBus: 0)
+        lastRecognitionEmission = ""
         finalHandler = nil
         didFinish = false
     }
@@ -1260,6 +1267,7 @@ private final class MissionTranscriber {
 
         audioEngine.reset()
         audioEngine.inputNode.removeTap(onBus: 0)
+        lastRecognitionEmission = ""
         finalHandler = nil
         handler?(resolvedTranscript)
     }
