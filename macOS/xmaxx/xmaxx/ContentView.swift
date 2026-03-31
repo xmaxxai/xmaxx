@@ -82,7 +82,7 @@ struct ContentView: View {
         .onAppear {
             guard !didAppear else { return }
             didAppear = true
-            store.triggerAutomationPermissionProbeIfNeeded()
+            store.triggerPermissionProbesIfNeeded()
             store.autoStartIfPossible()
         }
         .onDisappear {

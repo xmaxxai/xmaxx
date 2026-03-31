@@ -8,6 +8,7 @@
 import Combine
 import Foundation
 import Security
+import ApplicationServices
 import AVFoundation
 import Speech
 
@@ -186,7 +187,7 @@ final class AppStore: ObservableObject {
     private var loopTask: Task<Void, Never>?
     private var listeningRestartTask: Task<Void, Never>?
     private var speakingTask: Task<Void, Never>?
-    private var didTriggerAutomationProbe = false
+    private var didTriggerPermissionProbes = false
     private var didAutoStart = false
     private var shouldResumeListeningAfterSpeech = false
     private let speechCoordinator = SpeechCoordinator()
@@ -359,12 +360,13 @@ final class AppStore: ObservableObject {
         )
     }
 
-    func triggerAutomationPermissionProbeIfNeeded() {
-        guard !didTriggerAutomationProbe else { return }
-        didTriggerAutomationProbe = true
+    func triggerPermissionProbesIfNeeded() {
+        guard !didTriggerPermissionProbes else { return }
+        didTriggerPermissionProbes = true
 
         Task { @MainActor in
-            AppleEventsPrompter.triggerSystemEventsProbe()
+            SystemPermissionPrompter.triggerAccessibilityPromptIfNeeded()
+            SystemPermissionPrompter.triggerAutomationPrompt()
         }
     }
 
@@ -1383,8 +1385,16 @@ extension SpeechCoordinator: AVSpeechSynthesizerDelegate, AVAudioPlayerDelegate 
     }
 }
 
-private enum AppleEventsPrompter {
-    static func triggerSystemEventsProbe() {
+private enum SystemPermissionPrompter {
+    static func triggerAccessibilityPromptIfNeeded() {
+        let options = [
+            kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true
+        ] as CFDictionary
+
+        _ = AXIsProcessTrustedWithOptions(options)
+    }
+
+    static func triggerAutomationPrompt() {
         let source = """
         tell application "System Events"
             return name of first process whose frontmost is true
