@@ -20,7 +20,7 @@ struct ContentView: View {
             ZStack {
                 backgroundView
 
-                ScrollView([.horizontal, .vertical]) {
+                ScrollView(.vertical) {
                     VStack(spacing: 18) {
                         HeaderBar(store: store, isCompact: layout.isHeaderCompact) {
                             isSettingsPresented = true
@@ -66,11 +66,8 @@ struct ContentView: View {
                         }
                     }
                     .padding(20)
-                    .frame(
-                        minWidth: layout.minimumCanvasWidth,
-                        minHeight: max(proxy.size.height - 1, 720),
-                        alignment: .topLeading
-                    )
+                    .frame(width: max(proxy.size.width - 1, layout.minimumCanvasWidth), alignment: .topLeading)
+                    .frame(minHeight: max(proxy.size.height - 1, 720), alignment: .topLeading)
                 }
                 .scrollIndicators(.visible)
             }
@@ -147,6 +144,7 @@ private struct HeaderBar: View {
                 }
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var titleBlock: some View {
@@ -291,20 +289,26 @@ private struct ControlDeckPanel: View {
                             Text(store.recordingStatusMessage)
                                 .font(.system(size: 12, weight: .medium, design: .rounded))
                                 .foregroundStyle(Color.white.opacity(0.52))
+                                .multilineTextAlignment(.leading)
                                 .fixedSize(horizontal: false, vertical: true)
+                                .frame(maxWidth: .infinity, alignment: .leading)
                         }
 
                         if !store.voiceAnalysisSummary.isEmpty {
                             Text(store.voiceAnalysisSummary)
                                 .font(.system(size: 11, weight: .medium, design: .rounded))
                                 .foregroundStyle(Color(red: 0.56, green: 0.82, blue: 0.77))
+                                .multilineTextAlignment(.leading)
                                 .fixedSize(horizontal: false, vertical: true)
+                                .frame(maxWidth: .infinity, alignment: .leading)
                         }
 
                         Text("Turn on the microphone and keep talking naturally. The first utterance starts the mission, and while the loop runs you can keep speaking short steering updates; each pause gets folded into the next iteration.")
                             .font(.system(size: 11, weight: .medium, design: .rounded))
                             .foregroundStyle(Color.white.opacity(0.42))
+                            .multilineTextAlignment(.leading)
                             .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
 
                         TextEditor(text: $store.missionText)
                             .scrollContentBackground(.hidden)
@@ -922,17 +926,23 @@ private struct ActionRow: View {
                     Text(action.title)
                         .font(.system(size: 16, weight: .bold, design: .rounded))
                         .foregroundStyle(.white)
+                        .multilineTextAlignment(.leading)
+                        .lineLimit(2)
+                        .frame(maxWidth: .infinity, alignment: .leading)
 
                     Spacer()
 
                     Text(action.status.rawValue.capitalized)
                         .font(.system(size: 11, weight: .black, design: .rounded))
                         .foregroundStyle(statusColor)
+                        .fixedSize(horizontal: true, vertical: false)
                 }
 
                 Text("\(action.tool) -> \(action.target)")
                     .font(.system(size: 12, weight: .bold, design: .rounded))
                     .foregroundStyle(Color.white.opacity(0.50))
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 if let x = action.x, let y = action.y {
                     Text(String(format: "Coordinates: %.1f, %.1f", x, y))
@@ -1392,6 +1402,7 @@ private struct PanelSurface<Content: View>: View {
 
     var body: some View {
         content
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(22)
             .background(
                 RoundedRectangle(cornerRadius: 30, style: .continuous)
