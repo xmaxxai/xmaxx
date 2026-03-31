@@ -62,6 +62,11 @@ enum LoopStatus: Hashable {
     }
 }
 
+private enum ActionApprovalDecision {
+    case confirm
+    case revise
+}
+
 enum AudioDialogueMode: String, CaseIterable, Hashable, Identifiable {
     case external
     case internalOnly = "internal"
@@ -162,6 +167,7 @@ final class AppStore: ObservableObject {
     @Published var voiceAnalysisSummary: String
     @Published var externalDialogText: String
     @Published var internalDialogText: String
+    @Published private(set) var awaitingActionConfirmation: Bool
     @Published private(set) var isAccessibilityGranted: Bool
     @Published private(set) var isScreenRecordingGranted: Bool
     @Published var status: LoopStatus = .idle
@@ -200,6 +206,7 @@ final class AppStore: ObservableObject {
     private var liveVoiceLoopContext = ""
     private var missionDraftBaseText: String?
     private var operatorFeedbackDraftBaseText: String?
+    private var actionApprovalContinuation: CheckedContinuation<ActionApprovalDecision, Never>?
     private let speechCoordinator = SpeechCoordinator()
     private let missionTranscriber = MissionTranscriber()
 
@@ -266,6 +273,7 @@ final class AppStore: ObservableObject {
         voiceAnalysisSummary = ""
         externalDialogText = "Ready to speak to the operator."
         internalDialogText = "Internal loop narration will appear here."
+        awaitingActionConfirmation = false
         isAccessibilityGranted = SystemPermissionPrompter.isAccessibilityGranted()
         isScreenRecordingGranted = SystemPermissionPrompter.isScreenRecordingGranted()
         maxIterations = storedMaxIterations == 0 ? 5 : min(storedMaxIterations, 12)
@@ -302,7 +310,7 @@ final class AppStore: ObservableObject {
     }
 
     var canRunLoop: Bool {
-        !missionText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && status != .running
+        !missionText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && status != .running && loopTask == nil && !awaitingActionConfirmation
     }
 
     var actionGraphSnapshot: ActionGraphSnapshot {
@@ -599,10 +607,12 @@ final class AppStore: ObservableObject {
     }
 
     func stopLoop() {
+        let wasAwaitingActionConfirmation = awaitingActionConfirmation
+        resolvePendingActionApproval(with: .revise)
         loopTask?.cancel()
         loopTask = nil
 
-        if status == .running {
+        if status == .running || wasAwaitingActionConfirmation {
             status = .stopped
             statusMessage = "Loop stopped by operator."
             deliverDialogue(
@@ -625,6 +635,14 @@ final class AppStore: ObservableObject {
         voiceLoopEnabled = true
         persistWorkspaceDraft()
         beginMissionListening()
+    }
+
+    func confirmPendingActions() {
+        guard awaitingActionConfirmation else { return }
+        resolvePendingActionApproval(with: .confirm)
+        status = .running
+        statusMessage = "Action confirmation received. Executing approved actions."
+        recordingStatusMessage = "Action confirmation received. Executing approved actions."
     }
 
     private func beginMissionListening() {
@@ -749,10 +767,27 @@ final class AppStore: ObservableObject {
             return
         }
 
+        if awaitingActionConfirmation && isActionConfirmationCommand(normalized) {
+            recordingStatusMessage = "Voice confirmation received. Executing approved actions."
+            capture.deleteTemporaryAudioFileIfNeeded()
+            confirmPendingActions()
+            return
+        }
+
         operatorFeedback = appendOperatorFeedbackEntry(trimmedTranscript, to: baseOperatorFeedback)
         persistWorkspaceDraft()
-        recordingStatusMessage = "Steering captured immediately. The loop will use it while voice analysis continues."
+        recordingStatusMessage = "Steering captured immediately and appended to the active context."
         startBackgroundVoiceAnalysis(capture, analysisPurpose: "steering")
+
+        if awaitingActionConfirmation {
+            statusMessage = "New steering received. Replanning before any action executes."
+            resolvePendingActionApproval(with: .revise)
+            return
+        }
+
+        if loopTask != nil {
+            restartLoopPlanningWithLatestContext()
+        }
     }
 
     private func startBackgroundVoiceAnalysis(
@@ -875,6 +910,63 @@ final class AppStore: ObservableObject {
         return cappedEntries.joined(separator: "\n\n")
     }
 
+    private func requiresActionConfirmation(for actions: [ActionItem]) -> Bool {
+        actions.contains { action in
+            action.status == .ready && isExecutableActionTool(action.tool)
+        }
+    }
+
+    private func isExecutableActionTool(_ tool: String) -> Bool {
+        let normalizedTool = tool.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return normalizedTool == "mouse_move" || normalizedTool == "mouse_click" || normalizedTool == "mouse_right_click"
+    }
+
+    private func waitForPendingActionApproval() async -> ActionApprovalDecision {
+        await withCheckedContinuation { continuation in
+            actionApprovalContinuation = continuation
+        }
+    }
+
+    private func resolvePendingActionApproval(with decision: ActionApprovalDecision) {
+        awaitingActionConfirmation = false
+        let continuation = actionApprovalContinuation
+        actionApprovalContinuation = nil
+        continuation?.resume(returning: decision)
+    }
+
+    private func isActionConfirmationCommand(_ normalizedTranscript: String) -> Bool {
+        let phrases = [
+            "confirm action",
+            "confirm actions",
+            "approve action",
+            "approve actions",
+            "go ahead",
+            "proceed",
+            "continue",
+            "yes do it",
+            "yes proceed",
+            "run the action",
+            "execute the action",
+            "execute actions"
+        ]
+
+        return phrases.contains { normalizedTranscript.contains($0) }
+    }
+
+    private func restartLoopPlanningWithLatestContext() {
+        guard loopTask != nil else { return }
+
+        let preservedVoiceContext = liveVoiceLoopContext
+        loopTask?.cancel()
+        loopTask = nil
+        status = .running
+        statusMessage = "Restarting planning with updated operator guidance."
+        runOODALoop(
+            preserveVoiceLoop: true,
+            supplementalEnvironment: preservedVoiceContext
+        )
+    }
+
     private func runLoopSession(
         mission: String,
         environment: String,
@@ -882,8 +974,9 @@ final class AppStore: ObservableObject {
     ) async throws {
         var history: [OODACycle] = []
         let limit = min(max(maxIterations, 1), 12)
+        var iteration = 1
 
-        for iteration in 1...limit {
+        while iteration <= limit {
             try Task.checkCancellation()
 
             currentIteration = iteration
@@ -909,6 +1002,30 @@ final class AppStore: ObservableObject {
                 maxIterations: limit,
                 priorCycles: history
             )
+
+            sections = result.sections
+            actionQueue = result.actions
+            objectiveProgress = result.progress
+
+            if !result.objectiveMet && !result.isBlocked && requiresActionConfirmation(for: result.actions) {
+                awaitingActionConfirmation = true
+                status = .ready
+                statusMessage = "Plan ready. Say 'confirm action' to execute or keep talking to revise."
+                externalDialogText = "Plan ready. Say confirm action to execute, or keep talking to revise."
+                internalDialogText = "Waiting for action confirmation on iteration \(iteration). Fresh operator speech will revise the plan before any action executes."
+
+                switch await waitForPendingActionApproval() {
+                case .revise:
+                    try Task.checkCancellation()
+                    status = .running
+                    statusMessage = "Replanning with updated operator guidance."
+                    continue
+                case .confirm:
+                    try Task.checkCancellation()
+                    status = .running
+                    statusMessage = "Action confirmation received. Executing approved actions."
+                }
+            }
 
             let cycle = OODACycle(
                 iteration: iteration,
@@ -971,6 +1088,8 @@ final class AppStore: ObservableObject {
                 scheduleMissionListeningRestartIfNeeded()
                 return
             }
+
+            iteration += 1
         }
     }
 

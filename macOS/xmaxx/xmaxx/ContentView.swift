@@ -370,7 +370,21 @@ private struct ControlDeckPanel: View {
                     .disabled(!store.canRunLoop)
                     .opacity(store.canRunLoop ? 1 : 0.55)
 
-                    if store.status == .running {
+                    if store.awaitingActionConfirmation {
+                        Button("Approve Actions") {
+                            store.confirmPendingActions()
+                        }
+                        .font(.system(size: 13, weight: .bold, design: .rounded))
+                        .foregroundStyle(Color.white.opacity(0.92))
+                        .buttonStyle(.plain)
+
+                        Text("The loop is holding execution until you approve. Keep talking to revise the plan before anything runs.")
+                            .font(.system(size: 12, weight: .medium, design: .rounded))
+                            .foregroundStyle(Color.white.opacity(0.54))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    if store.status == .running || store.awaitingActionConfirmation {
                         Button("Stop Loop") {
                             store.stopLoop()
                         }
