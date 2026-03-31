@@ -218,7 +218,7 @@ final class AppStore: ObservableObject {
     private let userDefaults: UserDefaults
     private let keychain = KeychainStore()
     private let client = OpenAIClient()
-    private let mouseExecutor = PythonMouseExecutor()
+    private let mouseExecutor = NativeMouseExecutor()
     private let screenCoordinateResolver = ScreenCoordinateResolver()
     private let pyannoteClient = PyannoteClient()
 
@@ -431,8 +431,6 @@ final class AppStore: ObservableObject {
 
         Task.detached(priority: .utility) {
             _ = SystemPermissionPrompter.requestScreenRecordingAccessIfNeeded()
-            SystemPermissionPrompter.triggerAutomationPrompt(forBundleIdentifier: "com.apple.finder")
-            SystemPermissionPrompter.triggerAutomationPrompt()
 
             await MainActor.run {
                 self.refreshPermissionStatuses()
@@ -650,8 +648,7 @@ final class AppStore: ObservableObject {
         Runtime capability status:
         - Real automation executor available for coordinate-based mouse_move, mouse_click, and mouse_right_click.
         - Screen coordinate resolver available through find_screen_text. It captures a fresh screenshot, runs OCR, and maps visible text to screen coordinates.
-        - Mouse automation depends on Accessibility permission. Current Accessibility status: \(accessibilityStatus).
-        - Apple Events Automation approval may exist for Finder/System Events prompts, but the current action executor uses HID mouse events rather than AppleScript.
+        - Mouse automation uses native HID mouse events from this app and depends on Accessibility permission. Current Accessibility status: \(accessibilityStatus).
         - Screen Recording permission status: \(screenRecordingStatus).
         - Screenshot-based coordinate finding depends on Screen Recording approval. Without it, the resolver cannot inspect the desktop.
         - Live operator steering by voice is available while the loop is running.
@@ -1080,19 +1077,30 @@ final class AppStore: ObservableObject {
                 }
             }
 
+            let executedActions = await executeActions(result.actions)
+            let runtimeBlocker = executedActions
+                .first(where: { $0.status == .blocked })?
+                .output?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let cycleSummary: String
+            if let runtimeBlocker, !runtimeBlocker.isEmpty {
+                cycleSummary = "\(result.summary) Runtime result: \(runtimeBlocker)"
+            } else {
+                cycleSummary = result.summary
+            }
             let cycle = NavigationCycle(
                 iteration: iteration,
                 createdAt: .now,
                 mission: mission,
                 environment: liveEnvironment,
-                summary: result.summary,
+                summary: cycleSummary,
                 model: result.model,
                 progress: result.progress,
                 objectiveMet: result.objectiveMet,
-                isBlocked: result.isBlocked,
-                blocker: result.blocker,
+                isBlocked: result.isBlocked || !(runtimeBlocker ?? "").isEmpty,
+                blocker: runtimeBlocker ?? result.blocker,
                 sections: result.sections,
-                actions: await executeActions(result.actions)
+                actions: executedActions
             )
 
             history.append(cycle)
@@ -1509,12 +1517,22 @@ private struct OpenAIClient {
         If exact coordinates are not known but the click target is visible text on screen, you may omit x and y and set target to the exact text so the runtime can resolve coordinates from a fresh screenshot.
         A real automation executor exists for those mouse tools. Do not claim automation is unavailable when coordinates or searchable visible text and Accessibility permission are available.
         Only mark the loop blocked for automation when coordinates are missing, Accessibility permission is missing, or a real tool execution error occurs.
+        Treat prior action outputs as ground truth. Do not repeat the same blocked action with the same target unless the new cycle explains what changed.
         """
 
         let operatorName = profileName.isEmpty ? "Operator" : profileName
-        let historySummary = priorCycles.isEmpty ? "No prior cycles yet." : priorCycles.prefix(6).map { cycle in
+        let historySummary = priorCycles.isEmpty ? "No prior cycles yet." : priorCycles.suffix(6).map { cycle in
             let blockerText = cycle.blocker ?? "none"
-            let actionTitles = cycle.actions.map(\.title).joined(separator: ", ")
+            let actionSummaries = cycle.actions.map { action in
+                let output = action.output?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "no runtime output"
+                let coordinates = if let x = action.x, let y = action.y {
+                    "@ (\(String(format: "%.1f", x)), \(String(format: "%.1f", y)))"
+                } else {
+                    "@ unresolved"
+                }
+
+                return "\(action.title) [\(action.tool) \(coordinates)] status=\(action.status.rawValue); target=\(action.target); output=\(output)"
+            }.joined(separator: "\n")
             return """
             Cycle \(cycle.iteration)
             Summary: \(cycle.summary)
@@ -1522,7 +1540,8 @@ private struct OpenAIClient {
             Objective Met: \(cycle.objectiveMet)
             Blocked: \(cycle.isBlocked)
             Blocker: \(blockerText)
-            Actions: \(actionTitles)
+            Actions:
+            \(actionSummaries)
             """
         }.joined(separator: "\n\n")
         let userPrompt = """
@@ -1664,6 +1683,11 @@ private actor ScreenCoordinateResolver {
         let confidence: Double
     }
 
+    private struct ScoredMatch {
+        let match: ScreenCoordinateMatch
+        let score: Double
+    }
+
     func findCoordinates(for target: String) async throws -> ScreenCoordinateMatch {
         let trimmedTarget = target.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedTarget.isEmpty else {
@@ -1674,18 +1698,37 @@ private actor ScreenCoordinateResolver {
             throw ScreenCoordinateResolutionError.screenRecordingPermissionMissing
         }
 
-        let (screenshot, captureRect) = try await captureMainDisplayImage()
+        let captures = try await captureDisplayImages()
+        var sawRecognizedText = false
+        var bestResolvedMatch: ScoredMatch?
 
-        let candidates = try recognizeVisibleText(in: screenshot)
-        guard !candidates.isEmpty else {
+        for (screenshot, captureRect) in captures {
+            let candidates = try recognizeVisibleText(in: screenshot)
+            guard !candidates.isEmpty else { continue }
+            sawRecognizedText = true
+
+            guard let candidateMatch = bestMatch(for: trimmedTarget, in: candidates, captureRect: captureRect) else {
+                continue
+            }
+
+            if let existingBestMatch = bestResolvedMatch {
+                if candidateMatch.score > existingBestMatch.score {
+                    bestResolvedMatch = candidateMatch
+                }
+            } else {
+                bestResolvedMatch = candidateMatch
+            }
+        }
+
+        guard sawRecognizedText else {
             throw ScreenCoordinateResolutionError.noTextRecognized
         }
 
-        guard let bestMatch = bestMatch(for: trimmedTarget, in: candidates, captureRect: captureRect) else {
+        guard let bestResolvedMatch else {
             throw ScreenCoordinateResolutionError.targetNotFound(trimmedTarget)
         }
 
-        return bestMatch
+        return bestResolvedMatch.match
     }
 
     private func recognizeVisibleText(in screenshot: CGImage) throws -> [RecognizedTextCandidate] {
@@ -1731,7 +1774,7 @@ private actor ScreenCoordinateResolver {
         for target: String,
         in candidates: [RecognizedTextCandidate],
         captureRect: CGRect
-    ) -> ScreenCoordinateMatch? {
+    ) -> ScoredMatch? {
         let normalizedTarget = normalize(target)
         let targetTokens = Set(normalizedTarget.split(separator: " ").map(String.init))
         guard !normalizedTarget.isEmpty else { return nil }
@@ -1755,12 +1798,15 @@ private actor ScreenCoordinateResolver {
         let midX = captureRect.minX + (candidate.bounds.midX * captureRect.width)
         let midY = captureRect.minY + ((1 - candidate.bounds.midY) * captureRect.height)
 
-        return ScreenCoordinateMatch(
-            query: target,
-            matchedText: candidate.text,
-            x: midX,
-            y: midY,
-            confidence: min(max(score, 0), 1)
+        return ScoredMatch(
+            match: ScreenCoordinateMatch(
+                query: target,
+                matchedText: candidate.text,
+                x: midX,
+                y: midY,
+                confidence: min(max(score, 0), 1)
+            ),
+            score: score
         )
     }
 
@@ -1802,15 +1848,41 @@ private actor ScreenCoordinateResolver {
             .joined(separator: " ")
     }
 
-    private func captureMainDisplayImage() async throws -> (CGImage, CGRect) {
+    private func captureDisplayImages() async throws -> [(CGImage, CGRect)] {
         let shareableContent = try await currentShareableContent()
-        guard let display = shareableContent.displays.first(where: { $0.displayID == CGMainDisplayID() }) ?? shareableContent.displays.first else {
+        let displays = shareableContent.displays.sorted { lhs, rhs in
+            if lhs.displayID == CGMainDisplayID() {
+                return true
+            }
+
+            if rhs.displayID == CGMainDisplayID() {
+                return false
+            }
+
+            return lhs.frame.minX < rhs.frame.minX
+        }
+
+        guard !displays.isEmpty else {
             throw ScreenCoordinateResolutionError.screenshotUnavailable
         }
 
-        let rect = display.frame
-        let image = try await captureImage(in: rect)
-        return (image, rect)
+        var captures: [(CGImage, CGRect)] = []
+        for display in displays {
+            let rect = display.frame
+
+            do {
+                let image = try await captureImage(in: rect)
+                captures.append((image, rect))
+            } catch {
+                continue
+            }
+        }
+
+        guard !captures.isEmpty else {
+            throw ScreenCoordinateResolutionError.screenshotUnavailable
+        }
+
+        return captures
     }
 
     private func currentShareableContent() async throws -> SCShareableContent {
@@ -1830,76 +1902,34 @@ private actor ScreenCoordinateResolver {
     }
 }
 
-private actor PythonMouseExecutor {
+private actor NativeMouseExecutor {
     func execute(tool: String, x: Double, y: Double) async throws -> String {
-        let buttonName: String
-        let eventKind: String
+        let location = CGPoint(x: x, y: y)
 
         switch tool {
         case "mouse_move":
-            buttonName = "left"
-            eventKind = "move"
+            try postMouseEvent(type: .mouseMoved, position: location, button: .left)
         case "mouse_right_click":
-            buttonName = "right"
-            eventKind = "click"
+            try postMouseEvent(type: .mouseMoved, position: location, button: .left)
+            try await Task.sleep(nanoseconds: 50_000_000)
+            try postMouseEvent(type: .rightMouseDown, position: location, button: .right)
+            try postMouseEvent(type: .rightMouseUp, position: location, button: .right)
         default:
-            buttonName = "left"
-            eventKind = "click"
+            try postMouseEvent(type: .mouseMoved, position: location, button: .left)
+            try await Task.sleep(nanoseconds: 50_000_000)
+            try postMouseEvent(type: .leftMouseDown, position: location, button: .left)
+            try postMouseEvent(type: .leftMouseUp, position: location, button: .left)
         }
 
-        let script = """
-import Quartz
-import time
+        return "\(tool) executed at (\(String(format: "%.1f", x)), \(String(format: "%.1f", y)))"
+    }
 
-x = float(\(x))
-y = float(\(y))
-point = (x, y)
-
-move = Quartz.CGEventCreateMouseEvent(None, Quartz.kCGEventMouseMoved, point, Quartz.kCGMouseButtonLeft)
-Quartz.CGEventPost(Quartz.kCGHIDEventTap, move)
-time.sleep(0.05)
-
-if "\(eventKind)" == "click":
-    button = Quartz.kCGMouseButtonRight if "\(buttonName)" == "right" else Quartz.kCGMouseButtonLeft
-    down_type = Quartz.kCGEventRightMouseDown if button == Quartz.kCGMouseButtonRight else Quartz.kCGEventLeftMouseDown
-    up_type = Quartz.kCGEventRightMouseUp if button == Quartz.kCGMouseButtonRight else Quartz.kCGEventLeftMouseUp
-    down = Quartz.CGEventCreateMouseEvent(None, down_type, point, button)
-    up = Quartz.CGEventCreateMouseEvent(None, up_type, point, button)
-    Quartz.CGEventPost(Quartz.kCGHIDEventTap, down)
-    Quartz.CGEventPost(Quartz.kCGHIDEventTap, up)
-
-print(f"\(tool) executed at ({x:.1f}, {y:.1f})")
-"""
-
-        return try await withCheckedThrowingContinuation { continuation in
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
-            process.arguments = ["-c", script]
-
-            let outputPipe = Pipe()
-            let errorPipe = Pipe()
-            process.standardOutput = outputPipe
-            process.standardError = errorPipe
-
-            process.terminationHandler = { process in
-                let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
-                let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-                let output = String(data: outputData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                let errorText = String(data: errorData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-
-                if process.terminationStatus == 0 {
-                    continuation.resume(returning: output.isEmpty ? "\(tool) executed." : output)
-                } else {
-                    continuation.resume(throwing: MouseExecutionError.executionFailed(errorText.isEmpty ? "Python mouse command failed." : errorText))
-                }
-            }
-
-            do {
-                try process.run()
-            } catch {
-                continuation.resume(throwing: MouseExecutionError.executionFailed(error.localizedDescription))
-            }
+    private func postMouseEvent(type: CGEventType, position: CGPoint, button: CGMouseButton) throws {
+        guard let event = CGEvent(mouseEventSource: nil, mouseType: type, mouseCursorPosition: position, mouseButton: button) else {
+            throw MouseExecutionError.eventCreationFailed
         }
+
+        event.post(tap: .cghidEventTap)
     }
 }
 
@@ -2736,28 +2766,6 @@ private enum SystemPermissionPrompter {
         guard !CGPreflightScreenCaptureAccess() else { return true }
         return CGRequestScreenCaptureAccess()
     }
-
-    nonisolated static func triggerAutomationPrompt(forBundleIdentifier bundleIdentifier: String) {
-        let descriptor = NSAppleEventDescriptor(bundleIdentifier: bundleIdentifier)
-        _ = AEDeterminePermissionToAutomateTarget(
-            descriptor.aeDesc,
-            AEEventClass(typeWildCard),
-            AEEventID(typeWildCard),
-            true
-        )
-    }
-
-    nonisolated static func triggerAutomationPrompt() {
-        let source = """
-        tell application "System Events"
-            return name of first process whose frontmost is true
-        end tell
-        """
-
-        guard let script = NSAppleScript(source: source) else { return }
-        var error: NSDictionary?
-        _ = script.executeAndReturnError(&error)
-    }
 }
 
 private struct ElevenLabsClient {
@@ -2821,10 +2829,13 @@ private enum ElevenLabsError: LocalizedError {
 }
 
 private enum MouseExecutionError: LocalizedError {
+    case eventCreationFailed
     case executionFailed(String)
 
     var errorDescription: String? {
         switch self {
+        case .eventCreationFailed:
+            return "The app could not create a native mouse event."
         case let .executionFailed(message):
             return message
         }
