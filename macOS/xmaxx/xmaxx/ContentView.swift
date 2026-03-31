@@ -242,6 +242,22 @@ private struct ControlDeckPanel: View {
 
                 MetricStrip(store: store)
 
+                fieldBlock(title: "Automation") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(spacing: 8) {
+                            PermissionCapsule(title: "Accessibility", isGranted: store.isAccessibilityGranted)
+                            PermissionCapsule(title: "Screen", isGranted: store.isScreenRecordingGranted)
+                        }
+
+                        Text(store.automationStatusMessage)
+                            .font(.system(size: 12, weight: .medium, design: .rounded))
+                            .foregroundStyle(Color.white.opacity(0.70))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(14)
+                    .background(panelInputBackground)
+                }
+
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
                         Text("Iteration Budget")
@@ -1148,6 +1164,37 @@ private struct StatusPill: View {
     }
 }
 
+private struct PermissionCapsule: View {
+    let title: String
+    let isGranted: Bool
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Circle()
+                .fill(isGranted ? Color.green : Color.orange)
+                .frame(width: 8, height: 8)
+
+            Text(title)
+                .font(.system(size: 11, weight: .bold, design: .rounded))
+                .foregroundStyle(.white.opacity(0.86))
+
+            Text(isGranted ? "Granted" : "Missing")
+                .font(.system(size: 11, weight: .black, design: .rounded))
+                .foregroundStyle(isGranted ? Color.green.opacity(0.95) : Color.orange.opacity(0.95))
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(
+            Capsule(style: .continuous)
+                .fill(Color.white.opacity(0.07))
+        )
+        .overlay {
+            Capsule(style: .continuous)
+                .stroke(Color.white.opacity(0.10), lineWidth: 1)
+        }
+    }
+}
+
 private struct VoiceChannelCard: View {
     let title: String
     let systemImage: String
@@ -1305,15 +1352,27 @@ private struct SettingsSheet: View {
 
                         permissionRow(
                             title: "Accessibility",
-                            detail: "Required for coordinate-based mouse automation.",
+                            detail: "Required for HID mouse automation. If this is missing, mouse_move and mouse_click will not fire at all.",
                             isGranted: store.isAccessibilityGranted
                         )
 
                         permissionRow(
                             title: "Screen Recording",
-                            detail: "Required once the app starts capturing the desktop. The app now requests this permission, but approval alone does not turn on screenshots until a capture bridge is added.",
+                            detail: "Required for screenshot-based coordinate finding. The guided loop uses this to resolve visible text into screen coordinates.",
                             isGranted: store.isScreenRecordingGranted
                         )
+
+                        HStack(spacing: 10) {
+                            Button("Request Accessibility") {
+                                store.requestAccessibilityPermission()
+                            }
+                            .buttonStyle(.borderedProminent)
+
+                            Button("Open Accessibility Settings") {
+                                store.openAccessibilitySettings()
+                            }
+                            .buttonStyle(.bordered)
+                        }
 
                         HStack(spacing: 10) {
                             Button("Request Screen Recording") {
@@ -1332,7 +1391,20 @@ private struct SettingsSheet: View {
                             .buttonStyle(.bordered)
                         }
 
-                        Text("If macOS already cached a denial, the system may not show the prompt again. In that case enable xmaxx manually in System Settings > Privacy & Security > Screen Recording.")
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Automation Status")
+                                .font(.system(size: 12, weight: .bold, design: .rounded))
+                                .foregroundStyle(.white)
+
+                            Text(store.automationStatusMessage)
+                                .font(.system(size: 12, weight: .medium, design: .rounded))
+                                .foregroundStyle(Color.white.opacity(0.60))
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .padding(14)
+                        .background(sheetFieldBackground)
+
+                        Text("If macOS already cached a denial, the system may not show the prompt again. In that case enable xmaxx manually in System Settings > Privacy & Security > Accessibility and Screen Recording.")
                             .font(.system(size: 12, weight: .medium, design: .rounded))
                             .foregroundStyle(Color.white.opacity(0.45))
                     }

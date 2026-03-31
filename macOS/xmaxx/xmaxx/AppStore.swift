@@ -13,6 +13,8 @@ import ApplicationServices
 import CoreServices
 import AVFoundation
 import Speech
+import ScreenCaptureKit
+import Vision
 
 enum NavigationPhase: String, CaseIterable, Hashable, Codable, Identifiable {
     case observe
@@ -201,6 +203,7 @@ final class AppStore: ObservableObject {
     @Published private(set) var awaitingActionConfirmation: Bool
     @Published private(set) var isAccessibilityGranted: Bool
     @Published private(set) var isScreenRecordingGranted: Bool
+    @Published var automationStatusMessage: String
     @Published var status: LoopStatus = .idle
     @Published var statusMessage: String
     @Published var currentIteration: Int
@@ -216,6 +219,7 @@ final class AppStore: ObservableObject {
     private let keychain = KeychainStore()
     private let client = OpenAIClient()
     private let mouseExecutor = PythonMouseExecutor()
+    private let screenCoordinateResolver = ScreenCoordinateResolver()
     private let pyannoteClient = PyannoteClient()
 
     private let profileNameKey = "profileName"
@@ -247,15 +251,19 @@ final class AppStore: ObservableObject {
         let legacyDefaultEnvironmentText = """
         Current app shell is a macOS dashboard. We have profile and API key settings, but no live screen capture, automation executor, or tool bridge yet.
         """
-        let currentDefaultEnvironmentText = """
+        let previousCurrentDefaultEnvironmentText = """
         Current app shell is a macOS dashboard. ChatGPT planning is active, and a limited automation executor is available for coordinate-based mouse_move, mouse_click, and mouse_right_click when Accessibility permission is granted. Live screen capture is still unavailable, so actions need grounded coordinates from the environment.
+        """
+        let currentDefaultEnvironmentText = """
+        Current app shell is a macOS dashboard. ChatGPT planning is active, a limited automation executor is available for coordinate-based mouse_move, mouse_click, and mouse_right_click when Accessibility permission is granted, and screenshot-based coordinate lookup is available through find_screen_text when Screen Recording permission is granted.
         """
         let storedProfileName = userDefaults.string(forKey: profileNameKey) ?? ""
         let storedMissionText = userDefaults.string(forKey: missionTextKey) ?? "Build a desktop computer-use copilot around a guided loop."
         let persistedEnvironmentText = userDefaults.string(forKey: environmentTextKey)
         let storedEnvironmentText: String
         if let persistedEnvironmentText {
-            storedEnvironmentText = persistedEnvironmentText.trimmingCharacters(in: .whitespacesAndNewlines) == legacyDefaultEnvironmentText
+            let trimmedPersistedEnvironmentText = persistedEnvironmentText.trimmingCharacters(in: .whitespacesAndNewlines)
+            storedEnvironmentText = (trimmedPersistedEnvironmentText == legacyDefaultEnvironmentText || trimmedPersistedEnvironmentText == previousCurrentDefaultEnvironmentText)
                 ? currentDefaultEnvironmentText
                 : persistedEnvironmentText
         } else {
@@ -307,6 +315,7 @@ final class AppStore: ObservableObject {
         awaitingActionConfirmation = false
         isAccessibilityGranted = SystemPermissionPrompter.isAccessibilityGranted()
         isScreenRecordingGranted = SystemPermissionPrompter.isScreenRecordingGranted()
+        automationStatusMessage = "Checking automation capabilities."
         maxIterations = storedMaxIterations == 0 ? 5 : min(storedMaxIterations, 12)
         currentIteration = 0
         objectiveProgress = 0.18
@@ -334,6 +343,7 @@ final class AppStore: ObservableObject {
         ]
         statusMessage = "Observe clearly, act deliberately, and guide the distance to goal."
         selectedCycleID = cycles.first?.id
+        refreshAutomationStatusMessage()
     }
 
     var selectedCycle: NavigationCycle? {
@@ -433,6 +443,26 @@ final class AppStore: ObservableObject {
     func refreshPermissionStatuses() {
         isAccessibilityGranted = SystemPermissionPrompter.isAccessibilityGranted()
         isScreenRecordingGranted = SystemPermissionPrompter.isScreenRecordingGranted()
+        refreshAutomationStatusMessage()
+    }
+
+    func requestAccessibilityPermission() {
+        refreshPermissionStatuses()
+        SystemPermissionPrompter.triggerAccessibilityPromptIfNeeded()
+        statusMessage = "Accessibility prompt requested. Approve xmaxx in System Settings if macOS does not show a dialog."
+
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            self.refreshPermissionStatuses()
+        }
+    }
+
+    func openAccessibilitySettings() {
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") else {
+            return
+        }
+
+        NSWorkspace.shared.open(url)
     }
 
     func requestScreenRecordingPermission() {
@@ -597,6 +627,19 @@ final class AppStore: ObservableObject {
         return parts.joined(separator: "\n\n")
     }
 
+    private func refreshAutomationStatusMessage() {
+        let accessibilityStatus = isAccessibilityGranted ? "Accessibility is granted." : "Accessibility is missing."
+        let screenStatus = isScreenRecordingGranted ? "Screen Recording is granted." : "Screen Recording is missing."
+
+        automationStatusMessage = """
+        \(accessibilityStatus) \(screenStatus) Mouse automation only works after Accessibility approval. Screen-based coordinate finding only works after Screen Recording approval.
+        """
+    }
+
+    private func noteAutomationStatus(_ message: String) {
+        automationStatusMessage = message.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     private func runtimeCapabilitySummary() -> String {
         refreshPermissionStatuses()
         let accessibilityStatus = isAccessibilityGranted ? "granted" : "missing"
@@ -606,10 +649,11 @@ final class AppStore: ObservableObject {
         return """
         Runtime capability status:
         - Real automation executor available for coordinate-based mouse_move, mouse_click, and mouse_right_click.
+        - Screen coordinate resolver available through find_screen_text. It captures a fresh screenshot, runs OCR, and maps visible text to screen coordinates.
         - Mouse automation depends on Accessibility permission. Current Accessibility status: \(accessibilityStatus).
         - Apple Events Automation approval may exist for Finder/System Events prompts, but the current action executor uses HID mouse events rather than AppleScript.
         - Screen Recording permission status: \(screenRecordingStatus).
-        - Live screen capture is still unavailable in the app, so Screen Recording approval alone does not provide screenshots yet. Action coordinates still need grounded context.
+        - Screenshot-based coordinate finding depends on Screen Recording approval. Without it, the resolver cannot inspect the desktop.
         - Live operator steering by voice is available while the loop is running.
         - pyannote speaker analysis is \(pyannoteStatus).
         """
@@ -1182,6 +1226,7 @@ final class AppStore: ObservableObject {
 
     private func executeActions(_ actions: [ActionItem]) async -> [ActionItem] {
         var updatedActions = actions
+        var resolvedTargets: [String: CGPoint] = [:]
 
         for index in updatedActions.indices {
             let normalizedTool = updatedActions[index].tool
@@ -1191,26 +1236,69 @@ final class AppStore: ObservableObject {
             guard updatedActions[index].status == .ready else { continue }
 
             switch normalizedTool {
-            case "mouse_move", "mouse_click", "mouse_right_click":
-                guard let x = updatedActions[index].x, let y = updatedActions[index].y else {
-                    updatedActions[index].status = .blocked
-                    updatedActions[index].output = "Missing screen coordinates for \(updatedActions[index].tool)."
-                    continue
-                }
-
-                guard SystemPermissionPrompter.isAccessibilityGranted() else {
-                    updatedActions[index].status = .blocked
-                    updatedActions[index].output = "Mouse automation requires Accessibility permission in System Settings > Privacy & Security > Accessibility."
-                    continue
-                }
-
+            case "find_screen_text":
                 do {
-                    let result = try await mouseExecutor.execute(tool: normalizedTool, x: x, y: y)
+                    let match = try await screenCoordinateResolver.findCoordinates(for: updatedActions[index].target)
+                    updatedActions[index].x = match.x
+                    updatedActions[index].y = match.y
                     updatedActions[index].status = .done
-                    updatedActions[index].output = result
+                    updatedActions[index].output = "Found \"\(match.matchedText)\" at (\(String(format: "%.1f", match.x)), \(String(format: "%.1f", match.y))) with \(Int(match.confidence * 100))% confidence."
+                    resolvedTargets[coordinateCacheKey(for: updatedActions[index].target)] = CGPoint(x: match.x, y: match.y)
+                    noteAutomationStatus("Screen resolver found \"\(match.matchedText)\" at (\(String(format: "%.1f", match.x)), \(String(format: "%.1f", match.y))).")
                 } catch {
                     updatedActions[index].status = .blocked
                     updatedActions[index].output = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                    noteAutomationStatus(updatedActions[index].output ?? "Screen coordinate resolution failed.")
+                }
+
+            case "mouse_move", "mouse_click", "mouse_right_click":
+                guard SystemPermissionPrompter.isAccessibilityGranted() else {
+                    updatedActions[index].status = .blocked
+                    updatedActions[index].output = "Mouse automation requires Accessibility permission in System Settings > Privacy & Security > Accessibility."
+                    noteAutomationStatus(updatedActions[index].output ?? "Accessibility permission is missing.")
+                    continue
+                }
+
+                let resolvedPoint: CGPoint
+                if let x = updatedActions[index].x, let y = updatedActions[index].y {
+                    resolvedPoint = CGPoint(x: x, y: y)
+                } else if let cachedPoint = resolvedTargets[coordinateCacheKey(for: updatedActions[index].target)] {
+                    resolvedPoint = cachedPoint
+                    updatedActions[index].x = cachedPoint.x
+                    updatedActions[index].y = cachedPoint.y
+                } else {
+                    let trimmedTarget = updatedActions[index].target.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !trimmedTarget.isEmpty else {
+                        updatedActions[index].status = .blocked
+                        updatedActions[index].output = "Missing screen coordinates for \(updatedActions[index].tool), and no visible-text target was provided for screenshot lookup."
+                        noteAutomationStatus(updatedActions[index].output ?? "Missing screen coordinates.")
+                        continue
+                    }
+
+                    do {
+                        let match = try await screenCoordinateResolver.findCoordinates(for: trimmedTarget)
+                        resolvedPoint = CGPoint(x: match.x, y: match.y)
+                        updatedActions[index].x = match.x
+                        updatedActions[index].y = match.y
+                        resolvedTargets[coordinateCacheKey(for: trimmedTarget)] = resolvedPoint
+                        noteAutomationStatus("Resolved \"\(match.matchedText)\" to (\(String(format: "%.1f", match.x)), \(String(format: "%.1f", match.y))) before \(updatedActions[index].tool).")
+                    } catch {
+                        updatedActions[index].status = .blocked
+                        updatedActions[index].output = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                        noteAutomationStatus(updatedActions[index].output ?? "Screen coordinate resolution failed.")
+                        continue
+                    }
+                }
+
+                do {
+                    let result = try await mouseExecutor.execute(tool: normalizedTool, x: resolvedPoint.x, y: resolvedPoint.y)
+                    updatedActions[index].status = .done
+                    updatedActions[index].output = result
+                    noteAutomationStatus(result)
+                } catch {
+                    updatedActions[index].status = .blocked
+                    updatedActions[index].output = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                    noteAutomationStatus(updatedActions[index].output ?? "Mouse automation failed.")
                 }
 
             default:
@@ -1232,6 +1320,12 @@ final class AppStore: ObservableObject {
         case .done:
             return 0.95
         }
+    }
+
+    private func coordinateCacheKey(for target: String) -> String {
+        target
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
     }
 }
 
@@ -1409,8 +1503,11 @@ private struct OpenAIClient {
         Set "objective_met" true only when the objective is actually achieved within the known context.
         Set "blocked" true only when the next step cannot proceed without missing tooling, permissions, or new human input.
         "progress" must be a number from 0.0 to 1.0 showing estimated distance closed toward the mission.
-        Available executable tools right now are mouse_move, mouse_click, and mouse_right_click. When you choose one of those tools, include absolute screen coordinates in x and y. Do not invent coordinates unless the environment explicitly gives enough information to ground them.
-        A real automation executor exists for those mouse tools. Do not claim automation is unavailable when coordinates and Accessibility permission are available.
+        Available executable tools right now are mouse_move, mouse_click, mouse_right_click, and find_screen_text.
+        find_screen_text captures a fresh screenshot, OCRs visible text, and returns the center coordinates of matching visible text.
+        When you choose mouse_move, mouse_click, or mouse_right_click, include absolute screen coordinates in x and y when they are known.
+        If exact coordinates are not known but the click target is visible text on screen, you may omit x and y and set target to the exact text so the runtime can resolve coordinates from a fresh screenshot.
+        A real automation executor exists for those mouse tools. Do not claim automation is unavailable when coordinates or searchable visible text and Accessibility permission are available.
         Only mark the loop blocked for automation when coordinates are missing, Accessibility permission is missing, or a real tool execution error occurs.
         """
 
@@ -1443,7 +1540,7 @@ private struct OpenAIClient {
         Prior cycles:
         \(historySummary)
 
-        Produce the next guided cycle for this app. This is a macOS desktop copilot dashboard. It can plan through ChatGPT, it has a limited real automation executor for coordinate-based mouse actions, and it does not yet have live screen capture. Make the output useful, specific, and honest about gaps. Push the loop forward instead of repeating generic advice. Assume operator feedback may have arrived while the cycle was already running, and give it priority over stale earlier plans.
+        Produce the next guided cycle for this app. This is a macOS desktop copilot dashboard. It can plan through ChatGPT, it has a limited real automation executor for coordinate-based mouse actions, and it can resolve coordinates from screenshots when the target is visible text and Screen Recording permission is granted. Make the output useful, specific, and honest about gaps. Push the loop forward instead of repeating generic advice. Assume operator feedback may have arrived while the cycle was already running, and give it priority over stale earlier plans.
         """
 
         var request = URLRequest(url: url)
@@ -1522,6 +1619,214 @@ private struct OpenAIClient {
                 )
             }
         )
+    }
+}
+
+private struct ScreenCoordinateMatch {
+    let query: String
+    let matchedText: String
+    let x: Double
+    let y: Double
+    let confidence: Double
+}
+
+private enum ScreenCoordinateResolutionError: LocalizedError {
+    case missingTarget
+    case screenRecordingPermissionMissing
+    case screenshotUnavailable
+    case noTextRecognized
+    case targetNotFound(String)
+    case visionFailed(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .missingTarget:
+            return "Screen coordinate lookup needs a visible-text target."
+        case .screenRecordingPermissionMissing:
+            return "Screen coordinate lookup requires Screen Recording permission in System Settings > Privacy & Security > Screen Recording."
+        case .screenshotUnavailable:
+            return "The app could not capture the current screen."
+        case .noTextRecognized:
+            return "The screenshot was captured, but OCR did not find readable text."
+        case let .targetNotFound(target):
+            return "Could not find visible text matching \"\(target)\" on the current screen."
+        case let .visionFailed(message):
+            return message
+        }
+    }
+}
+
+private actor ScreenCoordinateResolver {
+    private struct RecognizedTextCandidate {
+        let text: String
+        let normalizedText: String
+        let bounds: CGRect
+        let confidence: Double
+    }
+
+    func findCoordinates(for target: String) async throws -> ScreenCoordinateMatch {
+        let trimmedTarget = target.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTarget.isEmpty else {
+            throw ScreenCoordinateResolutionError.missingTarget
+        }
+
+        guard SystemPermissionPrompter.isScreenRecordingGranted() else {
+            throw ScreenCoordinateResolutionError.screenRecordingPermissionMissing
+        }
+
+        let (screenshot, captureRect) = try await captureMainDisplayImage()
+
+        let candidates = try recognizeVisibleText(in: screenshot)
+        guard !candidates.isEmpty else {
+            throw ScreenCoordinateResolutionError.noTextRecognized
+        }
+
+        guard let bestMatch = bestMatch(for: trimmedTarget, in: candidates, captureRect: captureRect) else {
+            throw ScreenCoordinateResolutionError.targetNotFound(trimmedTarget)
+        }
+
+        return bestMatch
+    }
+
+    private func recognizeVisibleText(in screenshot: CGImage) throws -> [RecognizedTextCandidate] {
+        let request = VNRecognizeTextRequest()
+        request.recognitionLevel = .accurate
+        request.usesLanguageCorrection = true
+        request.minimumTextHeight = 0.012
+
+        let handler = VNImageRequestHandler(cgImage: screenshot, options: [:])
+
+        do {
+            try handler.perform([request])
+        } catch {
+            throw ScreenCoordinateResolutionError.visionFailed(error.localizedDescription)
+        }
+
+        let observations = request.results ?? []
+        return observations.compactMap { observation in
+            guard let candidate = observation.topCandidates(1).first else {
+                return nil
+            }
+
+            let text = candidate.string.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty else {
+                return nil
+            }
+
+            let normalizedText = normalize(text)
+            guard !normalizedText.isEmpty else {
+                return nil
+            }
+
+            return RecognizedTextCandidate(
+                text: text,
+                normalizedText: normalizedText,
+                bounds: observation.boundingBox,
+                confidence: Double(candidate.confidence)
+            )
+        }
+    }
+
+    private func bestMatch(
+        for target: String,
+        in candidates: [RecognizedTextCandidate],
+        captureRect: CGRect
+    ) -> ScreenCoordinateMatch? {
+        let normalizedTarget = normalize(target)
+        let targetTokens = Set(normalizedTarget.split(separator: " ").map(String.init))
+        guard !normalizedTarget.isEmpty else { return nil }
+
+        let bestCandidate = candidates
+            .map { candidate -> (RecognizedTextCandidate, Double) in
+                let score = scoreMatch(
+                    target: normalizedTarget,
+                    targetTokens: targetTokens,
+                    candidate: candidate.normalizedText,
+                    rawConfidence: candidate.confidence
+                )
+                return (candidate, score)
+            }
+            .max { lhs, rhs in lhs.1 < rhs.1 }
+
+        guard let (candidate, score) = bestCandidate, score >= 0.45 else {
+            return nil
+        }
+
+        let midX = captureRect.minX + (candidate.bounds.midX * captureRect.width)
+        let midY = captureRect.minY + ((1 - candidate.bounds.midY) * captureRect.height)
+
+        return ScreenCoordinateMatch(
+            query: target,
+            matchedText: candidate.text,
+            x: midX,
+            y: midY,
+            confidence: min(max(score, 0), 1)
+        )
+    }
+
+    private func scoreMatch(
+        target: String,
+        targetTokens: Set<String>,
+        candidate: String,
+        rawConfidence: Double
+    ) -> Double {
+        if candidate == target {
+            return 1.0
+        }
+
+        if candidate.contains(target) || target.contains(candidate) {
+            return min(0.96, 0.78 + (rawConfidence * 0.18))
+        }
+
+        let candidateTokens = Set(candidate.split(separator: " ").map(String.init))
+        let overlap = targetTokens.intersection(candidateTokens).count
+        let tokenScore = targetTokens.isEmpty ? 0 : Double(overlap) / Double(targetTokens.count)
+        let prefixBonus = candidate.hasPrefix(target) || target.hasPrefix(candidate) ? 0.12 : 0
+        let confidenceBonus = rawConfidence * 0.12
+
+        return min(0.95, tokenScore * 0.82 + prefixBonus + confidenceBonus)
+    }
+
+    private func normalize(_ text: String) -> String {
+        let lowercase = text.lowercased()
+        let scalars = lowercase.unicodeScalars.map { scalar -> Character in
+            if CharacterSet.alphanumerics.contains(scalar) {
+                return Character(scalar)
+            }
+
+            return " "
+        }
+
+        return String(scalars)
+            .split(whereSeparator: \.isWhitespace)
+            .joined(separator: " ")
+    }
+
+    private func captureMainDisplayImage() async throws -> (CGImage, CGRect) {
+        let shareableContent = try await currentShareableContent()
+        guard let display = shareableContent.displays.first(where: { $0.displayID == CGMainDisplayID() }) ?? shareableContent.displays.first else {
+            throw ScreenCoordinateResolutionError.screenshotUnavailable
+        }
+
+        let rect = display.frame
+        let image = try await captureImage(in: rect)
+        return (image, rect)
+    }
+
+    private func currentShareableContent() async throws -> SCShareableContent {
+        do {
+            return try await SCShareableContent.current
+        } catch {
+            throw ScreenCoordinateResolutionError.visionFailed(error.localizedDescription)
+        }
+    }
+
+    private func captureImage(in rect: CGRect) async throws -> CGImage {
+        do {
+            return try await SCScreenshotManager.captureImage(in: rect)
+        } catch {
+            throw ScreenCoordinateResolutionError.visionFailed(error.localizedDescription)
+        }
     }
 }
 
