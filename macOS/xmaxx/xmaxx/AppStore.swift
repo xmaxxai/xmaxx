@@ -59,6 +59,25 @@ enum LoopStatus: Hashable {
     }
 }
 
+enum AudioDialogueMode: String, CaseIterable, Hashable, Identifiable {
+    case external
+    case internalOnly = "internal"
+    case both
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .external:
+            return "External"
+        case .internalOnly:
+            return "Internal"
+        case .both:
+            return "Both"
+        }
+    }
+}
+
 struct OODASection: Identifiable, Hashable {
     let phase: OODAPhase
     var headline: String
@@ -76,6 +95,9 @@ struct ActionItem: Identifiable, Hashable {
     var target: String
     var rationale: String
     var status: ActionStatus
+    var x: Double?
+    var y: Double?
+    var output: String?
 }
 
 struct OODACycle: Identifiable, Hashable {
@@ -94,17 +116,47 @@ struct OODACycle: Identifiable, Hashable {
     let actions: [ActionItem]
 }
 
+struct ActionGraphNode: Identifiable, Hashable {
+    enum Kind: Hashable {
+        case loop
+        case phase(OODAPhase)
+        case action
+    }
+
+    let id: String
+    let title: String
+    let subtitle: String
+    let kind: Kind
+    let emphasis: Double
+}
+
+struct ActionGraphEdge: Identifiable, Hashable {
+    let id: String
+    let fromID: String
+    let toID: String
+    let weight: Double
+}
+
+struct ActionGraphSnapshot: Hashable {
+    let nodes: [ActionGraphNode]
+    let edges: [ActionGraphEdge]
+}
+
 @MainActor
 final class AppStore: ObservableObject {
     @Published var profileName: String
     @Published var chatGPTAPIKey: String
     @Published var elevenLabsAPIKey: String
     @Published var audioResponsesEnabled: Bool
+    @Published var audioDialogueMode: AudioDialogueMode
     @Published var missionText: String
     @Published var environmentText: String
     @Published var isRecordingMission: Bool
     @Published var voiceLoopEnabled: Bool
+    @Published var isAgentSpeaking: Bool
     @Published var recordingStatusMessage: String
+    @Published var externalDialogText: String
+    @Published var internalDialogText: String
     @Published var status: LoopStatus = .idle
     @Published var statusMessage: String
     @Published var currentIteration: Int
@@ -119,11 +171,13 @@ final class AppStore: ObservableObject {
     private let userDefaults: UserDefaults
     private let keychain = KeychainStore()
     private let client = OpenAIClient()
+    private let mouseExecutor = PythonMouseExecutor()
 
     private let profileNameKey = "profileName"
     private let chatGPTAPIKeyKey = "chatGPTAPIKey"
     private let elevenLabsAPIKeyKey = "elevenLabsAPIKey"
     private let audioResponsesEnabledKey = "audioResponsesEnabled"
+    private let audioDialogueModeKey = "audioDialogueMode"
     private let missionTextKey = "missionText"
     private let environmentTextKey = "environmentText"
     private let operatorFeedbackKey = "operatorFeedback"
@@ -131,6 +185,10 @@ final class AppStore: ObservableObject {
     private let voiceLoopEnabledKey = "voiceLoopEnabled"
     private var loopTask: Task<Void, Never>?
     private var listeningRestartTask: Task<Void, Never>?
+    private var speakingTask: Task<Void, Never>?
+    private var didTriggerAutomationProbe = false
+    private var didAutoStart = false
+    private var shouldResumeListeningAfterSpeech = false
     private let speechCoordinator = SpeechCoordinator()
     private let missionTranscriber = MissionTranscriber()
 
@@ -148,6 +206,7 @@ final class AppStore: ObservableObject {
         var storedAPIKey = keychain.read(account: chatGPTAPIKeyKey) ?? ""
         var storedElevenLabsAPIKey = keychain.read(account: elevenLabsAPIKeyKey) ?? ""
         let storedAudioResponsesEnabled = userDefaults.object(forKey: audioResponsesEnabledKey) as? Bool ?? false
+        let storedAudioDialogueMode = AudioDialogueMode(rawValue: userDefaults.string(forKey: audioDialogueModeKey) ?? "") ?? .external
 
         if storedAPIKey.isEmpty, let legacyAPIKey = userDefaults.string(forKey: chatGPTAPIKeyKey) {
             storedAPIKey = legacyAPIKey
@@ -167,10 +226,14 @@ final class AppStore: ObservableObject {
         chatGPTAPIKey = storedAPIKey
         elevenLabsAPIKey = storedElevenLabsAPIKey
         audioResponsesEnabled = storedAudioResponsesEnabled
+        audioDialogueMode = storedAudioDialogueMode
         operatorFeedback = storedOperatorFeedback
         isRecordingMission = false
         voiceLoopEnabled = storedVoiceLoopEnabled
+        isAgentSpeaking = false
         recordingStatusMessage = "Ready to capture the mission from audio."
+        externalDialogText = "Ready to speak to the operator."
+        internalDialogText = "Internal loop narration will appear here."
         maxIterations = storedMaxIterations == 0 ? 5 : min(storedMaxIterations, 12)
         currentIteration = 0
         objectiveProgress = 0.18
@@ -208,12 +271,125 @@ final class AppStore: ObservableObject {
         !missionText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && status != .running
     }
 
+    var actionGraphSnapshot: ActionGraphSnapshot {
+        let loopNode = ActionGraphNode(
+            id: "loop-\(currentIteration)",
+            title: currentIteration == 0 ? "Loop Standby" : "Loop \(currentIteration)",
+            subtitle: status.title,
+            kind: .loop,
+            emphasis: max(objectiveProgress, 0.25)
+        )
+
+        let phaseNodes = sections.map { section in
+            ActionGraphNode(
+                id: "phase-\(section.phase.rawValue)",
+                title: section.phase.rawValue.capitalized,
+                subtitle: section.headline,
+                kind: .phase(section.phase),
+                emphasis: max(section.confidence, 0.2)
+            )
+        }
+
+        let actionNodes = actionQueue.enumerated().map { index, action in
+            ActionGraphNode(
+                id: "action-\(index)-\(action.id.uuidString)",
+                title: action.title,
+                subtitle: action.output ?? action.tool,
+                kind: .action,
+                emphasis: graphEmphasis(for: action.status)
+            )
+        }
+
+        var edges = phaseNodes.map { node in
+            ActionGraphEdge(
+                id: "\(loopNode.id)-\(node.id)",
+                fromID: loopNode.id,
+                toID: node.id,
+                weight: node.emphasis
+            )
+        }
+
+        if let decideNode = phaseNodes.first(where: { $0.id == "phase-decide" }),
+           let actNode = phaseNodes.first(where: { $0.id == "phase-act" }) {
+            edges.append(
+                ActionGraphEdge(
+                    id: "\(decideNode.id)-\(actNode.id)",
+                    fromID: decideNode.id,
+                    toID: actNode.id,
+                    weight: 0.9
+                )
+            )
+        }
+
+        if let actNode = phaseNodes.first(where: { $0.id == "phase-act" }) {
+            edges.append(contentsOf: actionNodes.map { node in
+                ActionGraphEdge(
+                    id: "\(actNode.id)-\(node.id)",
+                    fromID: actNode.id,
+                    toID: node.id,
+                    weight: node.emphasis
+                )
+            })
+        }
+
+        if let observeNode = phaseNodes.first(where: { $0.id == "phase-observe" }),
+           let orientNode = phaseNodes.first(where: { $0.id == "phase-orient" }),
+           let decideNode = phaseNodes.first(where: { $0.id == "phase-decide" }) {
+            edges.append(
+                ActionGraphEdge(
+                    id: "\(observeNode.id)-\(orientNode.id)",
+                    fromID: observeNode.id,
+                    toID: orientNode.id,
+                    weight: 0.8
+                )
+            )
+            edges.append(
+                ActionGraphEdge(
+                    id: "\(orientNode.id)-\(decideNode.id)",
+                    fromID: orientNode.id,
+                    toID: decideNode.id,
+                    weight: 0.8
+                )
+            )
+        }
+
+        return ActionGraphSnapshot(
+            nodes: [loopNode] + phaseNodes + actionNodes,
+            edges: edges
+        )
+    }
+
+    func triggerAutomationPermissionProbeIfNeeded() {
+        guard !didTriggerAutomationProbe else { return }
+        didTriggerAutomationProbe = true
+
+        Task { @MainActor in
+            AppleEventsPrompter.triggerSystemEventsProbe()
+        }
+    }
+
+    func autoStartIfPossible() {
+        guard !didAutoStart else { return }
+        didAutoStart = true
+
+        guard !chatGPTAPIKey.isEmpty else {
+            status = .awaitingAPIKey
+            statusMessage = "Add your ChatGPT API key in settings to start the voice loop."
+            return
+        }
+
+        voiceLoopEnabled = true
+        persistWorkspaceDraft()
+        beginMissionListening()
+    }
+
     func updateSettings(profileName: String, chatGPTAPIKey: String) {
         updateSettings(
             profileName: profileName,
             chatGPTAPIKey: chatGPTAPIKey,
             elevenLabsAPIKey: elevenLabsAPIKey,
-            audioResponsesEnabled: audioResponsesEnabled
+            audioResponsesEnabled: audioResponsesEnabled,
+            audioDialogueMode: audioDialogueMode
         )
     }
 
@@ -221,15 +397,18 @@ final class AppStore: ObservableObject {
         profileName: String,
         chatGPTAPIKey: String,
         elevenLabsAPIKey: String,
-        audioResponsesEnabled: Bool
+        audioResponsesEnabled: Bool,
+        audioDialogueMode: AudioDialogueMode
     ) {
         self.profileName = profileName.trimmingCharacters(in: .whitespacesAndNewlines)
         self.chatGPTAPIKey = chatGPTAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
         self.elevenLabsAPIKey = elevenLabsAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
         self.audioResponsesEnabled = audioResponsesEnabled
+        self.audioDialogueMode = audioDialogueMode
 
         userDefaults.set(self.profileName, forKey: profileNameKey)
         userDefaults.set(self.audioResponsesEnabled, forKey: audioResponsesEnabledKey)
+        userDefaults.set(self.audioDialogueMode.rawValue, forKey: audioDialogueModeKey)
 
         if self.chatGPTAPIKey.isEmpty {
             keychain.delete(account: chatGPTAPIKeyKey)
@@ -313,7 +492,10 @@ final class AppStore: ObservableObject {
         if status == .running {
             status = .stopped
             statusMessage = "Loop stopped by operator."
-            speak("Loop stopped by operator.")
+            deliverDialogue(
+                external: "Stopping now.",
+                internal: "Loop stopped by operator."
+            )
             scheduleMissionListeningRestartIfNeeded()
         }
     }
@@ -333,7 +515,7 @@ final class AppStore: ObservableObject {
     }
 
     private func beginMissionListening() {
-        guard voiceLoopEnabled, !isRecordingMission, status != .running else { return }
+        guard voiceLoopEnabled, !isRecordingMission, !isAgentSpeaking, status != .running else { return }
         listeningRestartTask?.cancel()
 
         Task {
@@ -428,7 +610,7 @@ final class AppStore: ObservableObject {
                 isBlocked: result.isBlocked,
                 blocker: result.blocker,
                 sections: result.sections,
-                actions: result.actions
+                actions: await executeActions(result.actions)
             )
 
             history.append(cycle)
@@ -437,12 +619,18 @@ final class AppStore: ObservableObject {
             cycles.insert(cycle, at: 0)
             selectedCycleID = cycle.id
             objectiveProgress = cycle.progress
-            speak(cycle.spokenSummary)
+            deliverDialogue(
+                external: cycle.externalDialogue,
+                internal: cycle.internalDialogue
+            )
 
             if cycle.objectiveMet {
                 status = .completed
                 statusMessage = cycle.summary
-                speak("Objective met. \(cycle.summary)")
+                deliverDialogue(
+                    external: "Objective met. \(cycle.summary)",
+                    internal: "Iteration \(cycle.iteration) completed the mission with progress at \(Int(cycle.progress * 100)) percent."
+                )
                 loopTask = nil
                 scheduleMissionListeningRestartIfNeeded()
                 return
@@ -451,7 +639,10 @@ final class AppStore: ObservableObject {
             if cycle.isBlocked {
                 status = .blocked
                 statusMessage = cycle.blocker ?? cycle.summary
-                speak("Loop blocked. \(cycle.blocker ?? cycle.summary)")
+                deliverDialogue(
+                    external: "I am blocked. \(cycle.blocker ?? cycle.summary)",
+                    internal: "Loop blocked on iteration \(cycle.iteration). Reason: \(cycle.blocker ?? cycle.summary)"
+                )
                 loopTask = nil
                 scheduleMissionListeningRestartIfNeeded()
                 return
@@ -460,7 +651,10 @@ final class AppStore: ObservableObject {
             if iteration == limit {
                 status = .stopped
                 statusMessage = "Reached iteration limit without meeting the objective."
-                speak("Reached the iteration limit before the objective was met.")
+                deliverDialogue(
+                    external: "I ran out of iterations before finishing the objective.",
+                    internal: "Iteration budget exhausted at \(limit) cycles with progress at \(Int(cycle.progress * 100)) percent."
+                )
                 loopTask = nil
                 scheduleMissionListeningRestartIfNeeded()
                 return
@@ -471,39 +665,148 @@ final class AppStore: ObservableObject {
     private func scheduleMissionListeningRestartIfNeeded(delayNanoseconds: UInt64? = nil) {
         guard voiceLoopEnabled else { return }
 
+        if isAgentSpeaking {
+            shouldResumeListeningAfterSpeech = true
+            return
+        }
+
         listeningRestartTask?.cancel()
-        let delay = delayNanoseconds ?? (audioResponsesEnabled ? 4_000_000_000 : 800_000_000)
+        let delay = delayNanoseconds ?? 400_000_000
 
         listeningRestartTask = Task { @MainActor in
             try? await Task.sleep(nanoseconds: delay)
-            guard !Task.isCancelled, self.voiceLoopEnabled, self.status != .running else { return }
+            guard !Task.isCancelled, self.voiceLoopEnabled, !self.isAgentSpeaking, self.status != .running else { return }
             self.beginMissionListening()
         }
     }
 
-    private func speak(_ text: String) {
+    private func deliverDialogue(external: String, internal internalText: String) {
+        externalDialogText = external.trimmingCharacters(in: .whitespacesAndNewlines)
+        internalDialogText = internalText.trimmingCharacters(in: .whitespacesAndNewlines)
+
         guard audioResponsesEnabled else { return }
+
+        let spokenText: String
+        switch audioDialogueMode {
+        case .external:
+            spokenText = externalDialogText
+        case .internalOnly:
+            spokenText = internalDialogText
+        case .both:
+            spokenText = [externalDialogText, internalDialogText]
+                .filter { !$0.isEmpty }
+                .joined(separator: " Internal note. ")
+        }
 
         let elevenLabsAPIKey = self.elevenLabsAPIKey
 
-        Task {
-            await speechCoordinator.speak(
-                text: text,
+        guard !spokenText.isEmpty else { return }
+
+        listeningRestartTask?.cancel()
+        pauseMissionRecordingForProcessing()
+        isAgentSpeaking = true
+
+        speakingTask?.cancel()
+        speakingTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+
+            if self.voiceLoopEnabled {
+                self.recordingStatusMessage = "Speaking response. Microphone is paused to prevent feedback."
+            }
+
+            await speechCoordinator.speakAndWait(
+                text: spokenText,
                 elevenLabsAPIKey: elevenLabsAPIKey.isEmpty ? nil : elevenLabsAPIKey
             )
+
+            guard !Task.isCancelled else { return }
+
+            self.isAgentSpeaking = false
+
+            guard self.voiceLoopEnabled else { return }
+
+            if self.shouldResumeListeningAfterSpeech && self.status != .running {
+                self.shouldResumeListeningAfterSpeech = false
+                self.recordingStatusMessage = "Listening for the mission. Stop speaking and I will calculate."
+                self.beginMissionListening()
+            } else if self.status == .running {
+                self.recordingStatusMessage = "Processing mission."
+            } else {
+                self.recordingStatusMessage = "Ready to capture the mission from audio."
+            }
+        }
+    }
+
+    private func executeActions(_ actions: [ActionItem]) async -> [ActionItem] {
+        var updatedActions = actions
+
+        for index in updatedActions.indices {
+            let normalizedTool = updatedActions[index].tool
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+
+            guard updatedActions[index].status == .ready else { continue }
+
+            switch normalizedTool {
+            case "mouse_move", "mouse_click", "mouse_right_click":
+                guard let x = updatedActions[index].x, let y = updatedActions[index].y else {
+                    updatedActions[index].status = .blocked
+                    updatedActions[index].output = "Missing screen coordinates for \(updatedActions[index].tool)."
+                    continue
+                }
+
+                do {
+                    let result = try await mouseExecutor.execute(tool: normalizedTool, x: x, y: y)
+                    updatedActions[index].status = .done
+                    updatedActions[index].output = result
+                } catch {
+                    updatedActions[index].status = .blocked
+                    updatedActions[index].output = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                }
+
+            default:
+                continue
+            }
+        }
+
+        return updatedActions
+    }
+
+    private func graphEmphasis(for status: ActionStatus) -> Double {
+        switch status {
+        case .queued:
+            return 0.35
+        case .ready:
+            return 0.65
+        case .blocked:
+            return 0.45
+        case .done:
+            return 0.95
         }
     }
 }
 
 private extension OODACycle {
-    var spokenSummary: String {
-        let actionTitles = actions.prefix(2).map(\.title).joined(separator: ". ")
+    var externalDialogue: String {
+        let actionTitles = actions.prefix(2).map(\.title).joined(separator: ", ")
 
-        if actionTitles.isEmpty {
+        guard !actionTitles.isEmpty else {
             return "Iteration \(iteration). \(summary)"
         }
 
-        return "Iteration \(iteration). \(summary) Next actions: \(actionTitles)."
+        return "Iteration \(iteration). \(summary) Next I will handle \(actionTitles)."
+    }
+
+    var internalDialogue: String {
+        let observeHeadline = sections.first(where: { $0.phase == .observe })?.headline ?? "Observation unavailable"
+        let decideHeadline = sections.first(where: { $0.phase == .decide })?.headline ?? "Decision unavailable"
+        let actionTools = actions.prefix(3).map { "\($0.tool) on \($0.target)" }.joined(separator: "; ")
+
+        if actionTools.isEmpty {
+            return "Iteration \(iteration). Observe: \(observeHeadline). Decide: \(decideHeadline). No executable actions were attached."
+        }
+
+        return "Iteration \(iteration). Observe: \(observeHeadline). Decide: \(decideHeadline). Planned actions: \(actionTools). Progress is \(Int(progress * 100)) percent."
     }
 }
 
@@ -628,7 +931,7 @@ private struct OpenAIClient {
           "decide": { "headline": "string", "narrative": "string", "bullets": ["string"], "confidence": 0.0 },
           "act": { "headline": "string", "narrative": "string", "bullets": ["string"], "confidence": 0.0 },
           "actions": [
-            { "title": "string", "tool": "string", "target": "string", "rationale": "string", "status": "queued|ready|blocked|done" }
+            { "title": "string", "tool": "string", "target": "string", "rationale": "string", "status": "queued|ready|blocked|done", "x": 0.0, "y": 0.0 }
           ]
         }
 
@@ -636,6 +939,7 @@ private struct OpenAIClient {
         Set "objective_met" true only when the objective is actually achieved within the known context.
         Set "blocked" true only when the next step cannot proceed without missing tooling, permissions, or new human input.
         "progress" must be a number from 0.0 to 1.0 showing estimated distance closed toward the mission.
+        Available executable tools right now are mouse_move, mouse_click, and mouse_right_click. When you choose one of those tools, include absolute screen coordinates in x and y. Do not invent coordinates unless the environment explicitly gives enough information to ground them.
         """
 
         let operatorName = profileName.isEmpty ? "Operator" : profileName
@@ -738,10 +1042,86 @@ private struct OpenAIClient {
                     tool: $0.tool,
                     target: $0.target,
                     rationale: $0.rationale,
-                    status: $0.status
+                    status: $0.status,
+                    x: $0.x,
+                    y: $0.y,
+                    output: nil
                 )
             }
         )
+    }
+}
+
+private actor PythonMouseExecutor {
+    func execute(tool: String, x: Double, y: Double) async throws -> String {
+        let buttonName: String
+        let eventKind: String
+
+        switch tool {
+        case "mouse_move":
+            buttonName = "left"
+            eventKind = "move"
+        case "mouse_right_click":
+            buttonName = "right"
+            eventKind = "click"
+        default:
+            buttonName = "left"
+            eventKind = "click"
+        }
+
+        let script = """
+import Quartz
+import time
+
+x = float(\(x))
+y = float(\(y))
+point = (x, y)
+
+move = Quartz.CGEventCreateMouseEvent(None, Quartz.kCGEventMouseMoved, point, Quartz.kCGMouseButtonLeft)
+Quartz.CGEventPost(Quartz.kCGHIDEventTap, move)
+time.sleep(0.05)
+
+if "\(eventKind)" == "click":
+    button = Quartz.kCGMouseButtonRight if "\(buttonName)" == "right" else Quartz.kCGMouseButtonLeft
+    down_type = Quartz.kCGEventRightMouseDown if button == Quartz.kCGMouseButtonRight else Quartz.kCGEventLeftMouseDown
+    up_type = Quartz.kCGEventRightMouseUp if button == Quartz.kCGMouseButtonRight else Quartz.kCGEventLeftMouseUp
+    down = Quartz.CGEventCreateMouseEvent(None, down_type, point, button)
+    up = Quartz.CGEventCreateMouseEvent(None, up_type, point, button)
+    Quartz.CGEventPost(Quartz.kCGHIDEventTap, down)
+    Quartz.CGEventPost(Quartz.kCGHIDEventTap, up)
+
+print(f"\(tool) executed at ({x:.1f}, {y:.1f})")
+"""
+
+        return try await withCheckedThrowingContinuation { continuation in
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
+            process.arguments = ["-c", script]
+
+            let outputPipe = Pipe()
+            let errorPipe = Pipe()
+            process.standardOutput = outputPipe
+            process.standardError = errorPipe
+
+            process.terminationHandler = { process in
+                let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
+                let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
+                let output = String(data: outputData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                let errorText = String(data: errorData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+                if process.terminationStatus == 0 {
+                    continuation.resume(returning: output.isEmpty ? "\(tool) executed." : output)
+                } else {
+                    continuation.resume(throwing: MouseExecutionError.executionFailed(errorText.isEmpty ? "Python mouse command failed." : errorText))
+                }
+            }
+
+            do {
+                try process.run()
+            } catch {
+                continuation.resume(throwing: MouseExecutionError.executionFailed(error.localizedDescription))
+            }
+        }
     }
 }
 
@@ -751,6 +1131,9 @@ private final class MissionTranscriber {
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
     private var lastTranscript = ""
+    private var silenceCommitTask: Task<Void, Never>?
+    private var finalHandler: (@Sendable (String) -> Void)?
+    private var didFinish = false
 
     func start(
         initialText: String,
@@ -777,6 +1160,8 @@ private final class MissionTranscriber {
 
         stop()
         lastTranscript = initialText.trimmingCharacters(in: .whitespacesAndNewlines)
+        finalHandler = onFinal
+        didFinish = false
 
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
@@ -804,17 +1189,19 @@ private final class MissionTranscriber {
                     onUpdate(initialText)
                 } else {
                     onUpdate(transcript)
+                    self?.scheduleSilenceCommit(using: transcript)
                 }
             }
 
             if error != nil || (result?.isFinal ?? false) {
-                onFinal(self?.lastTranscript ?? initialText)
-                self?.stop()
+                self?.finish(withFallback: initialText)
             }
         }
     }
 
     func stop() {
+        silenceCommitTask?.cancel()
+        silenceCommitTask = nil
         recognitionTask?.cancel()
         recognitionTask = nil
 
@@ -826,6 +1213,44 @@ private final class MissionTranscriber {
         }
 
         audioEngine.inputNode.removeTap(onBus: 0)
+        finalHandler = nil
+        didFinish = false
+    }
+
+    private func scheduleSilenceCommit(using transcript: String) {
+        silenceCommitTask?.cancel()
+
+        silenceCommitTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 1_100_000_000)
+            guard !Task.isCancelled else { return }
+            self?.finish(withFallback: transcript)
+        }
+    }
+
+    private func finish(withFallback fallback: String) {
+        guard !didFinish else { return }
+        didFinish = true
+
+        silenceCommitTask?.cancel()
+        silenceCommitTask = nil
+
+        let finalTranscript = lastTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedTranscript = finalTranscript.isEmpty ? fallback : finalTranscript
+        let handler = finalHandler
+
+        recognitionTask?.cancel()
+        recognitionTask = nil
+
+        recognitionRequest?.endAudio()
+        recognitionRequest = nil
+
+        if audioEngine.isRunning {
+            audioEngine.stop()
+        }
+
+        audioEngine.inputNode.removeTap(onBus: 0)
+        finalHandler = nil
+        handler?(resolvedTranscript)
     }
 
     private func requestSpeechAuthorization() async -> SFSpeechRecognizerAuthorizationStatus {
@@ -868,26 +1293,31 @@ private enum MissionTranscriberError: LocalizedError {
 }
 
 @MainActor
-private final class SpeechCoordinator {
+private final class SpeechCoordinator: NSObject {
     private let fallbackSynthesizer = AVSpeechSynthesizer()
     private let elevenLabsClient = ElevenLabsClient()
     private var audioPlayer: AVAudioPlayer?
+    private var completionContinuation: CheckedContinuation<Void, Never>?
 
-    func speak(text: String, elevenLabsAPIKey: String?) async {
+    override init() {
+        super.init()
+        fallbackSynthesizer.delegate = self
+    }
+
+    func speakAndWait(text: String, elevenLabsAPIKey: String?) async {
         let cleanedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanedText.isEmpty else { return }
 
-        if fallbackSynthesizer.isSpeaking {
-            fallbackSynthesizer.stopSpeaking(at: .immediate)
-        }
-        audioPlayer?.stop()
+        stopCurrentPlayback()
 
         if let elevenLabsAPIKey, !elevenLabsAPIKey.isEmpty {
             do {
                 let audioData = try await elevenLabsClient.synthesize(text: cleanedText, apiKey: elevenLabsAPIKey)
                 audioPlayer = try AVAudioPlayer(data: audioData)
+                audioPlayer?.delegate = self
                 audioPlayer?.prepareToPlay()
                 audioPlayer?.play()
+                await waitForPlaybackToFinish()
                 return
             } catch {
                 // Fall through to the macOS system voice when ElevenLabs is unavailable.
@@ -898,6 +1328,72 @@ private final class SpeechCoordinator {
         utterance.rate = 0.48
         utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
         fallbackSynthesizer.speak(utterance)
+        await waitForPlaybackToFinish()
+    }
+
+    private func stopCurrentPlayback() {
+        completionContinuation?.resume()
+        completionContinuation = nil
+
+        if fallbackSynthesizer.isSpeaking {
+            fallbackSynthesizer.stopSpeaking(at: .immediate)
+        }
+
+        audioPlayer?.stop()
+        audioPlayer = nil
+    }
+
+    private func waitForPlaybackToFinish() async {
+        await withCheckedContinuation { continuation in
+            completionContinuation = continuation
+        }
+    }
+
+    private func finishPlayback() {
+        completionContinuation?.resume()
+        completionContinuation = nil
+        audioPlayer = nil
+    }
+
+}
+
+extension SpeechCoordinator: AVSpeechSynthesizerDelegate, AVAudioPlayerDelegate {
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+        Task { @MainActor in
+            self.finishPlayback()
+        }
+    }
+
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
+        Task { @MainActor in
+            self.finishPlayback()
+        }
+    }
+
+    nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+        Task { @MainActor in
+            self.finishPlayback()
+        }
+    }
+
+    nonisolated func audioPlayerDecodeErrorDidOccur(_ player: AVAudioPlayer, error: Error?) {
+        Task { @MainActor in
+            self.finishPlayback()
+        }
+    }
+}
+
+private enum AppleEventsPrompter {
+    static func triggerSystemEventsProbe() {
+        let source = """
+        tell application "System Events"
+            return name of first process whose frontmost is true
+        end tell
+        """
+
+        guard let script = NSAppleScript(source: source) else { return }
+        var error: NSDictionary?
+        _ = script.executeAndReturnError(&error)
     }
 }
 
@@ -956,6 +1452,17 @@ private enum ElevenLabsError: LocalizedError {
         case let .network(error):
             return error.xmaxxDescription(for: "ElevenLabs")
         case let .apiError(message):
+            return message
+        }
+    }
+}
+
+private enum MouseExecutionError: LocalizedError {
+    case executionFailed(String)
+
+    var errorDescription: String? {
+        switch self {
+        case let .executionFailed(message):
             return message
         }
     }
@@ -1112,6 +1619,8 @@ private struct LoopActionResponse: Decodable {
     let target: String
     let rationale: String
     let status: ActionStatus
+    let x: Double?
+    let y: Double?
 }
 
 private struct OpenAIErrorEnvelope: Decodable {

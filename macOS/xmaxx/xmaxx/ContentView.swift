@@ -6,10 +6,12 @@
 //
 
 import SwiftUI
+import SceneKit
 
 struct ContentView: View {
     @StateObject private var store = AppStore()
     @State private var isSettingsPresented = false
+    @State private var didAppear = false
 
     var body: some View {
         GeometryReader { proxy in
@@ -76,6 +78,12 @@ struct ContentView: View {
         .preferredColorScheme(.dark)
         .sheet(isPresented: $isSettingsPresented) {
             SettingsSheet(store: store)
+        }
+        .onAppear {
+            guard !didAppear else { return }
+            didAppear = true
+            store.triggerAutomationPermissionProbeIfNeeded()
+            store.autoStartIfPossible()
         }
         .onDisappear {
             store.persistWorkspaceDraft()
@@ -261,18 +269,22 @@ private struct ControlDeckPanel: View {
                             Button {
                                 store.toggleMissionRecording()
                             } label: {
-                                HStack(spacing: 8) {
-                                    Image(systemName: store.isRecordingMission ? "stop.circle.fill" : "mic.circle.fill")
-                                    Text(store.voiceLoopEnabled ? "Stop Voice Loop" : "Start Voice Loop")
+                                VStack(spacing: 8) {
+                                    Image(systemName: "mic.fill")
+                                        .font(.system(size: 28, weight: .bold))
+                                    Text(store.voiceLoopEnabled ? "Stop" : "Start")
+                                        .font(.system(size: 12, weight: .bold, design: .rounded))
                                 }
-                                .font(.system(size: 13, weight: .bold, design: .rounded))
                                 .foregroundStyle(store.isRecordingMission ? Color(red: 0.99, green: 0.48, blue: 0.36) : Color.white)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 10)
+                                .frame(width: 94, height: 94)
                                 .background(
-                                    Capsule()
+                                    Circle()
                                         .fill(Color.white.opacity(0.07))
                                 )
+                                .overlay {
+                                    Circle()
+                                        .stroke(Color.white.opacity(0.10), lineWidth: 1)
+                                }
                             }
                             .buttonStyle(.plain)
 
@@ -282,7 +294,7 @@ private struct ControlDeckPanel: View {
                                 .fixedSize(horizontal: false, vertical: true)
                         }
 
-                        Text("While voice loop is on, the app listens for a mission, waits for you to stop speaking, runs x-maxx, then resumes listening.")
+                        Text("Turn on the microphone, say the mission, pause, and the loop will take the next step.")
                             .font(.system(size: 11, weight: .medium, design: .rounded))
                             .foregroundStyle(Color.white.opacity(0.42))
                             .fixedSize(horizontal: false, vertical: true)
@@ -459,6 +471,33 @@ private struct MissionBoard: View {
                     }
                 }
             }
+
+            PanelSurface {
+                VStack(alignment: .leading, spacing: 16) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 8) {
+                            sectionLabel("3D Action Graph")
+                            Text("Live action topology")
+                                .font(.system(size: 28, weight: .bold, design: .rounded))
+                                .foregroundStyle(.white)
+                        }
+
+                        Spacer()
+
+                        Text("\(store.actionGraphSnapshot.nodes.count) nodes")
+                            .font(.system(size: 11, weight: .black, design: .rounded))
+                            .foregroundStyle(Color.white.opacity(0.62))
+                    }
+
+                    ActionGraphScene(snapshot: store.actionGraphSnapshot)
+                        .frame(minHeight: 320)
+
+                    Text("The graph updates as the loop changes, linking OODA phases to the actions that are queued, running, blocked, or done.")
+                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .foregroundStyle(Color.white.opacity(0.48))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
         }
     }
 }
@@ -473,11 +512,205 @@ private extension MissionBoard {
     }
 }
 
+private struct ActionGraphScene: View {
+    let snapshot: ActionGraphSnapshot
+
+    var body: some View {
+        SceneView(
+            scene: makeScene(from: snapshot),
+            pointOfView: nil,
+            options: [.allowsCameraControl, .autoenablesDefaultLighting]
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+        }
+    }
+
+    private func makeScene(from snapshot: ActionGraphSnapshot) -> SCNScene {
+        let scene = SCNScene()
+        scene.background.contents = NSColor(calibratedRed: 0.05, green: 0.07, blue: 0.11, alpha: 1)
+
+        let cameraNode = SCNNode()
+        cameraNode.camera = SCNCamera()
+        cameraNode.position = SCNVector3(0, 0, 18)
+        scene.rootNode.addChildNode(cameraNode)
+
+        let keyLight = SCNNode()
+        keyLight.light = SCNLight()
+        keyLight.light?.type = .omni
+        keyLight.position = SCNVector3(8, 10, 14)
+        scene.rootNode.addChildNode(keyLight)
+
+        let ambient = SCNNode()
+        ambient.light = SCNLight()
+        ambient.light?.type = .ambient
+        ambient.light?.color = NSColor.white.withAlphaComponent(0.35)
+        scene.rootNode.addChildNode(ambient)
+
+        let positions = layoutPositions(for: snapshot.nodes)
+        let positionMap = Dictionary(uniqueKeysWithValues: zip(snapshot.nodes.map(\.id), positions))
+
+        for edge in snapshot.edges {
+            guard let from = positionMap[edge.fromID], let to = positionMap[edge.toID] else { continue }
+            scene.rootNode.addChildNode(edgeNode(from: from, to: to, weight: edge.weight))
+        }
+
+        for (index, node) in snapshot.nodes.enumerated() {
+            let visual = makeNodeVisual(for: node)
+            visual.position = positions[index]
+            scene.rootNode.addChildNode(visual)
+        }
+
+        return scene
+    }
+
+    private func layoutPositions(for nodes: [ActionGraphNode]) -> [SCNVector3] {
+        nodes.enumerated().map { index, node in
+            switch node.kind {
+            case .loop:
+                return SCNVector3(0, 4.8, 0)
+            case let .phase(phase):
+                switch phase {
+                case .observe:
+                    return SCNVector3(-5.2, 1.8, 0)
+                case .orient:
+                    return SCNVector3(-1.7, 1.2, 1.6)
+                case .decide:
+                    return SCNVector3(1.7, 1.2, -1.6)
+                case .act:
+                    return SCNVector3(5.2, 1.8, 0)
+                }
+            case .action:
+                let actionIndex = max(index - 5, 0)
+                let row = actionIndex % 3
+                let column = actionIndex / 3
+                return SCNVector3(
+                    Float(-4 + (row * 4)),
+                    Float(-2.5 - Double(column * 2)),
+                    Float((row - 1) * 2)
+                )
+            }
+        }
+    }
+
+    private func makeNodeVisual(for node: ActionGraphNode) -> SCNNode {
+        let geometry: SCNGeometry
+        switch node.kind {
+        case .loop:
+            geometry = SCNSphere(radius: 0.82)
+        case .phase:
+            geometry = SCNBox(width: 1.3, height: 1.3, length: 1.3, chamferRadius: 0.28)
+        case .action:
+            geometry = SCNCapsule(capRadius: 0.46, height: 1.8)
+        }
+
+        let accent = color(for: node.kind)
+        geometry.firstMaterial?.diffuse.contents = accent.withAlphaComponent(0.92)
+        geometry.firstMaterial?.emission.contents = accent.withAlphaComponent(0.28 * node.emphasis)
+
+        let container = SCNNode()
+        let bodyNode = SCNNode(geometry: geometry)
+        container.addChildNode(bodyNode)
+
+        let text = SCNText(string: node.title, extrusionDepth: 0.18)
+        text.font = .systemFont(ofSize: 0.48, weight: .bold)
+        text.flatness = 0.2
+        text.firstMaterial?.diffuse.contents = NSColor.white.withAlphaComponent(0.92)
+
+        let textNode = SCNNode(geometry: text)
+        let (minBounds, maxBounds) = text.boundingBox
+        textNode.position = SCNVector3(
+            -((maxBounds.x - minBounds.x) / 2),
+            -1.55,
+            0
+        )
+        textNode.scale = SCNVector3(0.34, 0.34, 0.34)
+        container.addChildNode(textNode)
+
+        let rotationDuration = max(4.0, 14.0 - (node.emphasis * 6.0))
+        let spin = SCNAction.repeatForever(
+            SCNAction.rotateBy(x: 0, y: CGFloat.pi * 2, z: 0, duration: rotationDuration)
+        )
+        bodyNode.runAction(spin)
+
+        return container
+    }
+
+    private func edgeNode(from: SCNVector3, to: SCNVector3, weight: Double) -> SCNNode {
+        let source = SCNGeometrySource(vertices: [from, to])
+        let element = SCNGeometryElement(indices: [Int32(0), Int32(1)], primitiveType: .line)
+        let geometry = SCNGeometry(sources: [source], elements: [element])
+        geometry.firstMaterial?.diffuse.contents = NSColor.white.withAlphaComponent(0.18 + weight * 0.35)
+        return SCNNode(geometry: geometry)
+    }
+
+    private func color(for kind: ActionGraphNode.Kind) -> NSColor {
+        switch kind {
+        case .loop:
+            return NSColor(calibratedRed: 0.91, green: 0.95, blue: 0.98, alpha: 1)
+        case let .phase(phase):
+            switch phase {
+            case .observe:
+                return NSColor(calibratedRed: 0.35, green: 0.73, blue: 0.96, alpha: 1)
+            case .orient:
+                return NSColor(calibratedRed: 0.55, green: 0.84, blue: 0.65, alpha: 1)
+            case .decide:
+                return NSColor(calibratedRed: 0.98, green: 0.74, blue: 0.28, alpha: 1)
+            case .act:
+                return NSColor(calibratedRed: 0.99, green: 0.48, blue: 0.36, alpha: 1)
+            }
+        case .action:
+            return NSColor(calibratedRed: 0.83, green: 0.87, blue: 0.94, alpha: 1)
+        }
+    }
+}
+
 private struct ActivityRail: View {
     @ObservedObject var store: AppStore
 
     var body: some View {
         VStack(spacing: 18) {
+            PanelSurface {
+                VStack(alignment: .leading, spacing: 16) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 8) {
+                            sectionLabel("Voice Channels")
+                            Text("Internal vs external")
+                                .font(.system(size: 28, weight: .bold, design: .rounded))
+                                .foregroundStyle(.white)
+                        }
+
+                        Spacer()
+
+                        Text(store.audioDialogueMode.title)
+                            .font(.system(size: 11, weight: .black, design: .rounded))
+                            .foregroundStyle(Color.white.opacity(0.88))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(
+                                Capsule(style: .continuous)
+                                    .fill(Color.white.opacity(0.08))
+                            )
+                    }
+
+                    VoiceChannelCard(
+                        title: "Out Loud",
+                        systemImage: "speaker.wave.2.fill",
+                        bodyText: store.externalDialogText,
+                        accent: Color(red: 0.55, green: 0.84, blue: 0.65)
+                    )
+
+                    VoiceChannelCard(
+                        title: "Internal",
+                        systemImage: "brain.head.profile",
+                        bodyText: store.internalDialogText,
+                        accent: Color(red: 0.98, green: 0.74, blue: 0.28)
+                    )
+                }
+            }
+
             PanelSurface {
                 VStack(alignment: .leading, spacing: 16) {
                     sectionLabel("Recent Loops")
@@ -694,10 +927,23 @@ private struct ActionRow: View {
                     .font(.system(size: 12, weight: .bold, design: .rounded))
                     .foregroundStyle(Color.white.opacity(0.50))
 
+                if let x = action.x, let y = action.y {
+                    Text(String(format: "Coordinates: %.1f, %.1f", x, y))
+                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .foregroundStyle(Color.white.opacity(0.50))
+                }
+
                 Text(action.rationale)
                     .font(.system(size: 13, weight: .medium, design: .rounded))
                     .foregroundStyle(Color.white.opacity(0.72))
                     .fixedSize(horizontal: false, vertical: true)
+
+                if let output = action.output, !output.isEmpty {
+                    Text(output)
+                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .foregroundStyle(statusColor)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
         .padding(16)
@@ -859,6 +1105,42 @@ private struct StatusPill: View {
     }
 }
 
+private struct VoiceChannelCard: View {
+    let title: String
+    let systemImage: String
+    let bodyText: String
+    let accent: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(accent)
+
+                Text(title)
+                    .font(.system(size: 13, weight: .black, design: .rounded))
+                    .foregroundStyle(.white)
+            }
+
+            Text(bodyText)
+                .font(.system(size: 14, weight: .medium, design: .rounded))
+                .foregroundStyle(Color.white.opacity(0.80))
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(accent.opacity(0.12))
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(accent.opacity(0.20), lineWidth: 1)
+        }
+    }
+}
+
 private struct SettingsSheet: View {
     @ObservedObject var store: AppStore
     @Environment(\.dismiss) private var dismiss
@@ -866,6 +1148,7 @@ private struct SettingsSheet: View {
     @State private var chatGPTAPIKey: String
     @State private var elevenLabsAPIKey: String
     @State private var audioResponsesEnabled: Bool
+    @State private var audioDialogueMode: AudioDialogueMode
 
     init(store: AppStore) {
         self.store = store
@@ -873,6 +1156,7 @@ private struct SettingsSheet: View {
         _chatGPTAPIKey = State(initialValue: store.chatGPTAPIKey)
         _elevenLabsAPIKey = State(initialValue: store.elevenLabsAPIKey)
         _audioResponsesEnabled = State(initialValue: store.audioResponsesEnabled)
+        _audioDialogueMode = State(initialValue: store.audioDialogueMode)
     }
 
     var body: some View {
@@ -934,6 +1218,23 @@ private struct SettingsSheet: View {
                 }
                 .toggleStyle(.switch)
 
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Hear")
+                        .font(.system(size: 14, weight: .bold, design: .rounded))
+                        .foregroundStyle(Color.white.opacity(0.58))
+
+                    Picker("Hear", selection: $audioDialogueMode) {
+                        ForEach(AudioDialogueMode.allCases) { mode in
+                            Text(mode.title).tag(mode)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+
+                    Text("Choose whether spoken audio uses the user-facing reply, the agent's internal narration, or both.")
+                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .foregroundStyle(Color.white.opacity(0.45))
+                }
+
                 Text("API keys are stored securely in the macOS Keychain for this app.")
                     .font(.system(size: 12, weight: .medium, design: .rounded))
                     .foregroundStyle(Color.white.opacity(0.45))
@@ -966,7 +1267,8 @@ private struct SettingsSheet: View {
                             profileName: profileName,
                             chatGPTAPIKey: chatGPTAPIKey,
                             elevenLabsAPIKey: elevenLabsAPIKey,
-                            audioResponsesEnabled: audioResponsesEnabled
+                            audioResponsesEnabled: audioResponsesEnabled,
+                            audioDialogueMode: audioDialogueMode
                         )
                         dismiss()
                     }

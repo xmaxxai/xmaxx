@@ -262,6 +262,7 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSAppleEventsUsageDescription = "xmaxx uses automation to control other apps and carry out computer tasks on your behalf.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "xmaxx listens to your voice to capture the mission and drive the agent.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "xmaxx converts your speech into a mission so the agent can run the OODA loop.";
@@ -297,6 +298,7 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSAppleEventsUsageDescription = "xmaxx uses automation to control other apps and carry out computer tasks on your behalf.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "xmaxx listens to your voice to capture the mission and drive the agent.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "xmaxx converts your speech into a mission so the agent can run the OODA loop.";
