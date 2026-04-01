@@ -678,6 +678,47 @@ private struct ActivityRail: View {
                     }
 
                     VoiceChannelCard(
+                        title: "Voice Flow",
+                        systemImage: "waveform.badge.mic",
+                        bodyText: store.voiceFlowDetail,
+                        accent: voiceFlowAccent
+                    ) {
+                        VStack(alignment: .leading, spacing: 10) {
+                            HStack(spacing: 10) {
+                                Text(store.voiceFlowState.title)
+                                    .font(.system(size: 11, weight: .black, design: .rounded))
+                                    .foregroundStyle(voiceFlowAccent)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 6)
+                                    .background(
+                                        Capsule(style: .continuous)
+                                            .fill(voiceFlowAccent.opacity(0.14))
+                                    )
+
+                                Text(store.voiceFlowTitle)
+                                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                                    .foregroundStyle(.white)
+                            }
+
+                            if !store.voiceFlowTranscript.isEmpty {
+                                Text(store.voiceFlowTranscript)
+                                    .font(.system(size: 12, weight: .medium, design: .monospaced))
+                                    .foregroundStyle(Color.white.opacity(0.84))
+                                    .padding(12)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                            .fill(Color.black.opacity(0.22))
+                                    )
+                                    .overlay {
+                                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                            .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                                    }
+                            }
+                        }
+                    }
+
+                    VoiceChannelCard(
                         title: "Out Loud",
                         systemImage: "speaker.wave.2.fill",
                         bodyText: store.externalDialogText,
@@ -762,6 +803,23 @@ private struct ActivityRail: View {
                 .font(.system(size: 14, weight: .medium, design: .rounded))
                 .foregroundStyle(Color.white.opacity(0.84))
                 .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var voiceFlowAccent: Color {
+        switch store.voiceFlowState {
+        case .idle:
+            return Color(red: 0.69, green: 0.72, blue: 0.82)
+        case .listening:
+            return Color(red: 0.35, green: 0.73, blue: 0.96)
+        case .captured:
+            return Color(red: 0.98, green: 0.74, blue: 0.28)
+        case .processing:
+            return Color(red: 0.57, green: 0.89, blue: 0.74)
+        case .speaking:
+            return Color(red: 0.92, green: 0.60, blue: 0.26)
+        case .error:
+            return Color(red: 0.99, green: 0.54, blue: 0.44)
         }
     }
 }
@@ -1494,6 +1552,21 @@ private struct VoiceChannelCard: View {
     let systemImage: String
     let bodyText: String
     let accent: Color
+    var accessory: AnyView?
+
+    init(
+        title: String,
+        systemImage: String,
+        bodyText: String,
+        accent: Color,
+        @ViewBuilder accessory: () -> some View = { EmptyView() }
+    ) {
+        self.title = title
+        self.systemImage = systemImage
+        self.bodyText = bodyText
+        self.accent = accent
+        self.accessory = AnyView(accessory())
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -1512,6 +1585,8 @@ private struct VoiceChannelCard: View {
                 .foregroundStyle(Color.white.opacity(0.80))
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
+
+            accessory
         }
         .padding(16)
         .background(

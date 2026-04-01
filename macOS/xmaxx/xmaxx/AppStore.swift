@@ -340,6 +340,32 @@ enum AudioDialogueMode: String, CaseIterable, Hashable, Identifiable {
     }
 }
 
+enum VoiceFlowState: String, Hashable {
+    case idle
+    case listening
+    case captured
+    case processing
+    case speaking
+    case error
+
+    var title: String {
+        switch self {
+        case .idle:
+            return "Idle"
+        case .listening:
+            return "Listening"
+        case .captured:
+            return "Captured"
+        case .processing:
+            return "Incorporating"
+        case .speaking:
+            return "Speaking"
+        case .error:
+            return "Error"
+        }
+    }
+}
+
 struct NavigationSection: Identifiable, Hashable {
     let phase: NavigationPhase
     var stageTitle: String
@@ -421,6 +447,10 @@ final class AppStore: ObservableObject {
     @Published var voiceLoopEnabled: Bool
     @Published var isAgentSpeaking: Bool
     @Published var recordingStatusMessage: String
+    @Published var voiceFlowState: VoiceFlowState
+    @Published var voiceFlowTitle: String
+    @Published var voiceFlowDetail: String
+    @Published var voiceFlowTranscript: String
     @Published var voiceAnalysisSummary: String
     @Published var externalDialogText: String
     @Published var internalDialogText: String
@@ -538,6 +568,10 @@ final class AppStore: ObservableObject {
         voiceLoopEnabled = storedVoiceLoopEnabled
         isAgentSpeaking = false
         recordingStatusMessage = "Ready to capture the mission from audio."
+        voiceFlowState = .idle
+        voiceFlowTitle = "Voice loop idle"
+        voiceFlowDetail = "Start the voice loop, speak naturally, and pause once to commit your text into the loop."
+        voiceFlowTranscript = ""
         voiceAnalysisSummary = ""
         externalDialogText = "Ready to speak to the operator."
         internalDialogText = "Internal guided-loop narration will appear here."
@@ -743,6 +777,15 @@ final class AppStore: ObservableObject {
         recordingStatusMessage = missionText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             ? "Ready. Start the voice loop to capture the mission."
             : "Mission ready. Start the guided voice loop to run it with live steering."
+        updateVoiceFlow(
+            state: .idle,
+            title: "Voice loop ready",
+            detail: missionText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ? "Your first paused utterance will be captured as mission text."
+                : "The mission is loaded. Speaking now will either update the mission or steer the live loop.",
+            transcript: nil,
+            clearTranscript: missionText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        )
     }
 
     func updateSettings(profileName: String, chatGPTAPIKey: String) {
@@ -1012,6 +1055,12 @@ final class AppStore: ObservableObject {
     func startMissionRecording() {
         voiceLoopEnabled = true
         persistWorkspaceDraft()
+        updateVoiceFlow(
+            state: .listening,
+            title: "Mic armed",
+            detail: "Live transcript is open. Pause once and the current speech will be committed into the loop.",
+            transcript: nil
+        )
         beginMissionListening()
     }
 
@@ -1021,6 +1070,12 @@ final class AppStore: ObservableObject {
         status = .running
         statusMessage = "Action confirmation received. Executing approved actions."
         recordingStatusMessage = "Action confirmation received. Executing approved actions."
+        updateVoiceFlow(
+            state: .processing,
+            title: "Confirmation captured",
+            detail: "Your approval was heard and the queued actions are now moving through execution.",
+            transcript: "confirm action"
+        )
     }
 
     private func beginMissionListening() {
@@ -1033,6 +1088,14 @@ final class AppStore: ObservableObject {
             recordingStatusMessage = status == .running
                 ? "Guided loop running. Mic is active for steering. Pause to inject guidance."
                 : "Listening continuously. Pause to start x-maxx."
+            updateVoiceFlow(
+                state: .listening,
+                title: status == .running ? "Listening for steering" : "Listening for mission",
+                detail: status == .running
+                    ? "Keep talking. When you pause, the latest steering will be committed into the active loop."
+                    : "Keep talking. When you pause, the latest mission text will be committed and the loop will start.",
+                transcript: nil
+            )
             return
         }
 
@@ -1063,16 +1126,40 @@ final class AppStore: ObservableObject {
                 if status == .running {
                     missionTranscriber.resumeSegmentDelivery()
                     recordingStatusMessage = "Guided loop running. Mic is active for steering. Pause to inject guidance."
+                    updateVoiceFlow(
+                        state: .listening,
+                        title: "Listening for steering",
+                        detail: "Your next paused utterance will be captured and folded into the running loop.",
+                        transcript: nil
+                    )
                 } else if isAgentSpeaking {
                     missionTranscriber.suspendSegmentDelivery()
                     recordingStatusMessage = "Speaking response. Mic stays live while self-voice is ignored."
+                    updateVoiceFlow(
+                        state: .speaking,
+                        title: "Agent speaking",
+                        detail: "Your last captured text is already in the loop. The mic will resume as soon as playback clears.",
+                        transcript: nil
+                    )
                 } else {
                     missionTranscriber.resumeSegmentDelivery()
                     recordingStatusMessage = "Listening continuously. Pause to start x-maxx."
+                    updateVoiceFlow(
+                        state: .listening,
+                        title: "Listening for mission",
+                        detail: "The app is actively hearing you. Pause once to commit the current transcript into the mission flow.",
+                        transcript: nil
+                    )
                 }
             } catch {
                 isRecordingMission = false
                 recordingStatusMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                updateVoiceFlow(
+                    state: .error,
+                    title: "Voice capture failed",
+                    detail: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription,
+                    transcript: nil
+                )
             }
         }
     }
@@ -1089,6 +1176,15 @@ final class AppStore: ObservableObject {
         recordingStatusMessage = trimmedMission.isEmpty
             ? "Ready. Start the voice loop to capture the mission."
             : "Voice loop stopped. The current mission stays loaded."
+        updateVoiceFlow(
+            state: .idle,
+            title: "Voice loop stopped",
+            detail: trimmedMission.isEmpty
+                ? "Nothing is currently queued from voice."
+                : "The current mission stays loaded and can be resumed at any time.",
+            transcript: nil,
+            clearTranscript: trimmedMission.isEmpty
+        )
     }
 
     private func pauseMissionRecordingForProcessing() {
@@ -1120,6 +1216,12 @@ final class AppStore: ObservableObject {
         pauseMissionRecordingForProcessing()
         missionText = appendMissionEntry(trimmedTranscript, to: baseMissionText)
         recordingStatusMessage = "Mission captured. Running x-maxx while voice analysis continues."
+        updateVoiceFlow(
+            state: .processing,
+            title: "Mission captured",
+            detail: "Your paused speech was committed into the mission and is now being incorporated into the next loop run.",
+            transcript: trimmedTranscript
+        )
         runNavigationLoop(
             preserveVoiceLoop: true,
             supplementalEnvironment: ""
@@ -1142,6 +1244,12 @@ final class AppStore: ObservableObject {
 
         if normalized.contains("stop loop") || normalized.contains("cancel loop") || normalized.contains("halt loop") {
             recordingStatusMessage = "Voice command received. Stopping the loop."
+            updateVoiceFlow(
+                state: .captured,
+                title: "Stop command captured",
+                detail: "The voice command was heard and the active loop is stopping now.",
+                transcript: trimmedTranscript
+            )
             capture.deleteTemporaryAudioFileIfNeeded()
             stopLoop()
             return
@@ -1149,6 +1257,12 @@ final class AppStore: ObservableObject {
 
         if awaitingActionConfirmation && isActionConfirmationCommand(normalized) {
             recordingStatusMessage = "Voice confirmation received. Executing approved actions."
+            updateVoiceFlow(
+                state: .captured,
+                title: "Confirmation captured",
+                detail: "Your approval was captured and is being applied to the waiting plan.",
+                transcript: trimmedTranscript
+            )
             capture.deleteTemporaryAudioFileIfNeeded()
             confirmPendingActions()
             return
@@ -1161,12 +1275,31 @@ final class AppStore: ObservableObject {
 
         if awaitingActionConfirmation {
             statusMessage = "New steering received. Replanning before any action executes."
+            updateVoiceFlow(
+                state: .processing,
+                title: "Steering captured",
+                detail: "Your speech was appended to the operator feedback and the plan is being revised before any action runs.",
+                transcript: trimmedTranscript
+            )
             resolvePendingActionApproval(with: .revise)
             return
         }
 
         if loopTask != nil {
+            updateVoiceFlow(
+                state: .processing,
+                title: "Steering captured",
+                detail: "Your speech was appended to the live loop context and planning is restarting with that new input now.",
+                transcript: trimmedTranscript
+            )
             restartLoopPlanningWithLatestContext()
+        } else {
+            updateVoiceFlow(
+                state: .captured,
+                title: "Steering captured",
+                detail: "Your speech was appended to operator feedback and is ready for the next loop cycle.",
+                transcript: trimmedTranscript
+            )
         }
     }
 
@@ -1223,6 +1356,12 @@ final class AppStore: ObservableObject {
         }
 
         missionText = appendMissionEntry(trimmedTranscript, to: missionDraftBaseText ?? "")
+        updateVoiceFlow(
+            state: .listening,
+            title: "Hearing mission text",
+            detail: "The live transcript is updating. When you pause, this text will be committed into the mission and used by the loop.",
+            transcript: trimmedTranscript
+        )
     }
 
     private func updateOperatorFeedbackDraft(with transcript: String) {
@@ -1234,6 +1373,12 @@ final class AppStore: ObservableObject {
         }
 
         operatorFeedback = appendOperatorFeedbackEntry(trimmedTranscript, to: operatorFeedbackDraftBaseText ?? "")
+        updateVoiceFlow(
+            state: .listening,
+            title: "Hearing steering",
+            detail: "The live transcript is updating. When you pause, this text will be appended to the loop as fresh steering.",
+            transcript: trimmedTranscript
+        )
     }
 
     private func clearMissionDraftPreview() {
@@ -1341,6 +1486,12 @@ final class AppStore: ObservableObject {
         loopTask = nil
         status = .running
         statusMessage = "Restarting planning with updated operator guidance."
+        updateVoiceFlow(
+            state: .processing,
+            title: "Replanning with captured steering",
+            detail: "The latest paused speech is now part of the active context and the loop is being recomputed around it.",
+            transcript: voiceFlowTranscript.isEmpty ? nil : voiceFlowTranscript
+        )
         runNavigationLoop(
             preserveVoiceLoop: true,
             supplementalEnvironment: preservedVoiceContext
@@ -1499,6 +1650,14 @@ final class AppStore: ObservableObject {
             if self.isRecordingMission {
                 self.missionTranscriber.resumeSegmentDelivery()
                 self.recordingStatusMessage = "Listening continuously. Pause to start x-maxx."
+                self.updateVoiceFlow(
+                    state: .listening,
+                    title: self.status == .running ? "Listening for steering" : "Listening for mission",
+                    detail: self.status == .running
+                        ? "The loop is live again. Your next pause will commit fresh steering."
+                        : "The mic is live again. Your next pause will commit the mission text.",
+                    transcript: nil
+                )
             } else {
                 self.beginMissionListening()
             }
@@ -1531,6 +1690,12 @@ final class AppStore: ObservableObject {
         pauseMissionRecordingForProcessing()
         missionTranscriber.suspendSegmentDelivery()
         isAgentSpeaking = true
+        updateVoiceFlow(
+            state: .speaking,
+            title: "Agent speaking",
+            detail: "Your last captured speech is already in the loop. Playback is happening now and the mic resumes right after.",
+            transcript: nil
+        )
 
         speakingTask?.cancel()
         speakingTask = Task { @MainActor [weak self] in
@@ -1558,9 +1723,39 @@ final class AppStore: ObservableObject {
 
             if self.status == .running {
                 self.recordingStatusMessage = "Guided loop running. Mic is active for steering. Pause to inject guidance."
+                self.updateVoiceFlow(
+                    state: .listening,
+                    title: "Listening for steering",
+                    detail: "Playback finished. Your next pause will commit fresh steering into the running loop.",
+                    transcript: nil
+                )
             } else {
                 self.recordingStatusMessage = "Listening continuously. Pause to start x-maxx."
+                self.updateVoiceFlow(
+                    state: .listening,
+                    title: "Listening for mission",
+                    detail: "Playback finished. Your next pause will commit the current mission text into the loop.",
+                    transcript: nil
+                )
             }
+        }
+    }
+
+    private func updateVoiceFlow(
+        state: VoiceFlowState,
+        title: String,
+        detail: String,
+        transcript: String?,
+        clearTranscript: Bool = false
+    ) {
+        voiceFlowState = state
+        voiceFlowTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        voiceFlowDetail = detail.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if clearTranscript {
+            voiceFlowTranscript = ""
+        } else if let transcript {
+            voiceFlowTranscript = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
         }
     }
 
@@ -2303,7 +2498,7 @@ private struct MissionCapture {
 }
 
 private final class MissionTranscriber {
-    private let silenceCommitDelayNanoseconds: UInt64 = 500_000_000
+    private let silenceCommitDelayNanoseconds: UInt64 = 300_000_000
     private let playbackEchoFilterDuration: TimeInterval = 1.2
     private let audioEngine = AVAudioEngine()
     private let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
