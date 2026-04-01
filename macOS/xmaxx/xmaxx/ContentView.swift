@@ -85,7 +85,7 @@ struct ContentView: View {
             store.autoStartIfPossible()
         }
         .onDisappear {
-            store.persistWorkspaceDraft()
+            store.markApplicationClosedGracefully()
         }
     }
 

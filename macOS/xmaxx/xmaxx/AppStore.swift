@@ -566,10 +566,14 @@ private struct RecoverySnapshot: Codable {
     let voiceLoopEnabled: Bool
 
     var hasRecoverableState: Bool {
-        !mission.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
-        !operatorFeedback.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
         cycleCount > 1 ||
-        voiceLoopEnabled
+        (
+            voiceLoopEnabled &&
+            (
+                !mission.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                !operatorFeedback.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            )
+        )
     }
 }
 
@@ -636,11 +640,13 @@ final class AppStore: ObservableObject {
     private let maxIterationsKey = "maxIterations"
     private let voiceLoopEnabledKey = "voiceLoopEnabled"
     private let recoverySnapshotKey = "recoverySnapshot"
+    private let applicationSessionActiveKey = "applicationSessionActive"
     private var loopTask: Task<Void, Never>?
     private var listeningRestartTask: Task<Void, Never>?
     private var speakingTask: Task<Void, Never>?
     private var didTriggerPermissionProbes = false
     private var didAutoStart = false
+    private var previousLaunchEndedUncleanly = false
     private var liveVoiceLoopContext = ""
     private var missionDraftBaseText: String?
     private var operatorFeedbackDraftBaseText: String?
@@ -668,6 +674,7 @@ final class AppStore: ObservableObject {
         let storedMissionText = persistedMissionText.trimmingCharacters(in: .whitespacesAndNewlines) == legacyDefaultMissionText
             ? ""
             : persistedMissionText
+        let storedApplicationSessionActive = userDefaults.object(forKey: applicationSessionActiveKey) as? Bool ?? false
         let storedRecoverySnapshot = Self.loadRecoverySnapshot(
             from: userDefaults,
             key: recoverySnapshotKey
@@ -775,6 +782,7 @@ final class AppStore: ObservableObject {
             mission: storedMissionText,
             operatorFeedback: storedOperatorFeedback
         )
+        previousLaunchEndedUncleanly = storedApplicationSessionActive
         startupRecoverySnapshot = storedRecoverySnapshot
         refreshAutomationStatusMessage()
     }
@@ -1061,6 +1069,7 @@ final class AppStore: ObservableObject {
     func autoStartIfPossible() {
         guard !didAutoStart else { return }
         didAutoStart = true
+        markApplicationLaunchActive()
 
         if chatGPTAPIKey.isEmpty {
             status = .awaitingAPIKey
@@ -1083,13 +1092,22 @@ final class AppStore: ObservableObject {
         )
         persistRecoverySnapshot()
         presentStartupAssessmentIfNeeded()
+
+        if !isRecordingMission && !isAgentSpeaking {
+            startMissionRecording()
+        }
     }
 
     private func presentStartupAssessmentIfNeeded() {
         guard pendingOperatorPrompt == nil else { return }
+        guard previousLaunchEndedUncleanly else { return }
 
         let snapshot = startupRecoverySnapshot ?? currentRecoverySnapshot()
-        guard snapshot.hasRecoverableState else { return }
+        guard snapshot.hasRecoverableState else {
+            previousLaunchEndedUncleanly = false
+            startupRecoverySnapshot = nil
+            return
+        }
 
         let cycleWord = snapshot.cycleCount == 1 ? "cycle" : "cycles"
         let progressPercent = Int(snapshot.lastCycleProgress * 100)
@@ -1129,6 +1147,17 @@ final class AppStore: ObservableObject {
         )
         presentOperatorPrompt(prompt)
         startupRecoverySnapshot = nil
+        previousLaunchEndedUncleanly = false
+    }
+
+    func markApplicationClosedGracefully() {
+        persistWorkspaceDraft()
+        userDefaults.set(false, forKey: applicationSessionActiveKey)
+        previousLaunchEndedUncleanly = false
+    }
+
+    private func markApplicationLaunchActive() {
+        userDefaults.set(true, forKey: applicationSessionActiveKey)
     }
 
     private func currentRecoverySnapshot() -> RecoverySnapshot {
@@ -2368,7 +2397,7 @@ final class AppStore: ObservableObject {
         guard voiceLoopEnabled else { return }
 
         listeningRestartTask?.cancel()
-        let delay = delayNanoseconds ?? 400_000_000
+        let delay = delayNanoseconds ?? 180_000_000
 
         listeningRestartTask = Task { @MainActor in
             try? await Task.sleep(nanoseconds: delay)
@@ -2443,7 +2472,7 @@ final class AppStore: ObservableObject {
             guard self.voiceLoopEnabled else { return }
 
             self.missionTranscriber.resumeSegmentDelivery(
-                afterNanoseconds: 250_000_000,
+                afterNanoseconds: 120_000_000,
                 suppressingPlaybackEchoFrom: spokenText
             )
 
@@ -3358,8 +3387,8 @@ private struct MissionCapture {
 }
 
 private final class MissionTranscriber {
-    private let silenceCommitDelayNanoseconds: UInt64 = 300_000_000
-    private let playbackEchoFilterDuration: TimeInterval = 1.2
+    private let silenceCommitDelayNanoseconds: UInt64 = 180_000_000
+    private let playbackEchoFilterDuration: TimeInterval = 0.7
     private let audioEngine = AVAudioEngine()
     private let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
     private let audioCaptureQueue = DispatchQueue(label: "AthenaLive.xmaxx.audioCapture")
