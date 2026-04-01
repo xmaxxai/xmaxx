@@ -804,6 +804,22 @@ img {
   color: var(--text);
 }
 
+.voice-wave {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  align-items: end;
+  gap: 8px;
+  min-height: 88px;
+  padding: 8px 4px 0;
+}
+
+.voice-wave span {
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(109, 166, 255, 0.9), rgba(79, 224, 181, 0.72));
+  box-shadow: 0 0 18px rgba(109, 166, 255, 0.26);
+  min-height: 16px;
+}
+
 .maxx-console__grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

@@ -4,16 +4,16 @@ import './index.css'
 
 const homeNavLinks = [
   { href: '#manifesto', label: 'Manifesto', page: 'home' },
-  { href: '#domains', label: 'Domains', page: 'home' },
-  { href: '#stack', label: 'Stack', page: 'home' },
-  { href: '/core-unit', label: 'Core Unit', page: 'core-unit' },
+  { href: '#surfaces', label: 'Surfaces', page: 'home' },
+  { href: '#stack', label: 'Runtime', page: 'home' },
+  { href: '/core-unit', label: 'Voice Node', page: 'core-unit' },
 ]
 
 const coreUnitNavLinks = [
-  { href: '/', label: 'Maxxing OS', page: 'home' },
+  { href: '/', label: 'Voice OS', page: 'home' },
   { href: '#product-overview', label: 'Overview', page: 'core-unit' },
   { href: '#specs', label: 'Specs', page: 'core-unit' },
-  { href: '#modes', label: 'Modes', page: 'core-unit' },
+  { href: '#modes', label: 'Deploy', page: 'core-unit' },
   { href: '#security', label: 'Security', page: 'core-unit' },
 ]
 
@@ -43,210 +43,231 @@ const socialLinks = [
 
 const homeHeroStats = [
   {
-    label: 'Build Posture',
-    value: 'Open',
-    detail: 'Inspectable systems, forkable workflows, and community-owned improvement loops.',
+    label: 'Loop Model',
+    value: 'Observe -> Act',
+    detail: 'The app scaffolds each cycle through explicit stages and can swap between OODA, Bayes, RPD, RL, Predictive, and Cynefin lenses.',
   },
   {
-    label: 'Loop Horizon',
-    value: '24/7',
-    detail: 'AI agents can keep scoring, planning, and nudging across the surfaces you want to maxx.',
+    label: 'Voice Flow',
+    value: 'Pause commits',
+    detail: 'The mic stays live, partial transcripts update in place, and each pause commits mission input or fresh steering into the loop.',
   },
   {
-    label: 'Control Model',
-    value: 'Yours',
-    detail: 'You choose the stack, the metrics, the prompts, and what better actually means.',
-  },
-]
-
-const maxxTargets = [
-  'Looks',
-  'Style',
-  'Physique',
-  'Sleep',
-  'Focus',
-  'Code',
-  'Money',
-  'Space',
-]
-
-const softwareDeckColumns = [
-  {
-    title: 'Inputs',
-    items: ['Photos', 'Biometrics', 'Calendar', 'Spending', 'Codebase', 'Environment'],
-  },
-  {
-    title: 'Agents',
-    items: ['Audit', 'Plan', 'Critique', 'Automate', 'Remind', 'Escalate'],
-  },
-  {
-    title: 'Outputs',
-    items: ['Routines', 'Checklists', 'PRs', 'Protocols', 'Reports', 'Next moves'],
+    label: 'Automation Reach',
+    value: 'OCR + mouse',
+    detail: 'The current build can resolve visible screen text into coordinates and execute native mouse actions when macOS permissions are granted.',
   },
 ]
 
-const softwareDeckEvents = [
+const commandTargets = [
+  'Live transcript',
+  'OODA',
+  'find_screen_text',
+  'mouse_click',
+  'Approval',
+  'Cycle history',
+  'ElevenLabs',
+  'pyannoteAI',
+]
+
+const voiceHighlights = [
+  'macOS dashboard',
+  'Decision models',
+  'OCR targeting',
+  'Visible actions',
+  'Approval gates',
+  'Native mouse events',
+  'Voice steering',
+]
+
+const voiceDeckWaves = [22, 40, 28, 56, 34, 62, 76, 48, 58, 32, 46, 24]
+
+const voiceDeckColumns = [
   {
-    label: 'LOOKSMAXX',
-    detail: 'Grooming routine tightened, fit issues flagged, and presentation notes queued.',
+    title: 'Capture',
+    items: ['Mic active', 'Live transcript', 'Pause detection', 'Speaker audio capture'],
   },
   {
-    label: 'CODEMAXX',
-    detail: 'Backlog triaged, repo context summarized, and shipping sequence proposed.',
+    title: 'Interpret',
+    items: ['Decision model', 'Mission + environment', 'Operator steering', 'Runtime capability check'],
   },
   {
-    label: 'SLEEPMAXX',
-    detail: 'Late-night drift detected, recovery plan updated, and tomorrow adjusted.',
+    title: 'Execute',
+    items: ['find_screen_text', 'mouse_move', 'mouse_click', 'shell_command suggestion'],
   },
 ]
 
-const maxxDomains = [
+const voiceDeckActions = [
   {
-    title: 'Looksmaxx',
-    description: 'Make presentation measurable instead of vague.',
+    label: 'YOU SAID',
+    detail: '"Click the visible Continue button, then tell me whether the loop is blocked."',
+  },
+  {
+    label: 'XMAXX',
+    detail: 'Transcript committed, screenshot OCR requested, action queue updated, approval prompt ready.',
+  },
+  {
+    label: 'REVIEW',
+    detail: 'Executable steps stay visible. Risky moves can be revised or approved by voice before they fire.',
+  },
+]
+
+const commandSurfaces = [
+  {
+    title: 'Live Voice Loop',
+    description: 'The app is always listening when armed, and each pause becomes structured input.',
     items: [
-      'Hair, skin, beard, and grooming audits',
-      'Photo feedback, angles, and profile cleanup',
-      'Routine tracking that compounds visible gains',
+      'Continuous transcription with partial updates',
+      'A pause commits speech as mission input or fresh steering',
+      'Voice commands like "stop loop" and "confirm action" are handled directly',
     ],
   },
   {
-    title: 'Stylemaxx',
-    description: 'Treat clothes, fit, and personal taste like a system.',
+    title: 'Decision Models',
+    description: 'Reasoning is not one vague blob; the app can structure planning through named frameworks.',
     items: [
-      'Outfit planning from your actual wardrobe',
-      'Shopping shortlists with fewer bad buys',
-      'Occasion-specific style decision support',
+      'OODA, Recognition-Primed, System 1 / 2, Bayes, RL, Predictive, and Cynefin',
+      'Each loop stage gets its own prompt, narrative, bullets, and confidence',
+      'The active model changes the scaffold, not just the label',
     ],
   },
   {
-    title: 'Physiquemaxx',
-    description: 'Training, recovery, and nutrition loops that close.',
+    title: 'Screen Text Resolver',
+    description: 'The desktop loop can look at the screen and ground actions against visible text.',
     items: [
-      'Workout planning around goals and recovery',
-      'Body-comp trend analysis and habit adherence',
-      'Nutrition prompts and meal routine support',
+      'Fresh screenshots are captured through ScreenCaptureKit',
+      'Vision OCR maps visible text into real screen coordinates',
+      'The `find_screen_text` tool turns labels on screen into actionable points',
     ],
   },
   {
-    title: 'Sleepmaxx',
-    description: 'Upgrade energy by fixing the quiet bottleneck.',
+    title: 'Native Mouse Actions',
+    description: 'The current execution bridge is real, but intentionally narrow.',
     items: [
-      'Sleep timing and drift detection',
-      'Wind-down automation and stimulant guardrails',
-      'Morning readiness scoring and adjustments',
+      'Coordinate-based `mouse_move`, `mouse_click`, and `mouse_right_click`',
+      'CGEvent HID posting through macOS when Accessibility is granted',
+      'Targets can come from explicit coordinates or OCR-resolved text',
     ],
   },
   {
-    title: 'Focusmaxx',
-    description: 'Reduce chaos and convert intent into action.',
+    title: 'Operator Approval',
+    description: 'The loop asks before it commits to the wrong thing.',
     items: [
-      'Deep-work block design and interruption control',
-      'Priority compression from noisy task lists',
-      'Daily review loops that stop drift early',
+      'Questions, checkpoints, startup recovery, and action approval prompts',
+      'Fresh speech can revise a waiting plan before execution',
+      'The app distinguishes ready, queued, blocked, and done actions',
     ],
   },
   {
-    title: 'Codemaxx',
-    description: 'Aim AI at the repo, not just the prompt box.',
+    title: 'Spoken Dialogue',
+    description: 'The assistant can answer back out loud after each cycle.',
     items: [
-      'Codebase summaries, task decomposition, and patch plans',
-      'PR drafting, review prep, and issue triage',
-      'Local tooling for faster engineering loops',
+      'ElevenLabs synthesis when configured',
+      'macOS system voice fallback when ElevenLabs is unavailable',
+      'External, internal, or combined narration modes',
     ],
   },
   {
-    title: 'Moneymaxx',
-    description: 'Point AI at leverage, waste, and opportunity.',
+    title: 'Speaker Analysis',
+    description: 'Per-utterance diarization can enrich the loop context after you speak.',
     items: [
-      'Spending reviews and pattern detection',
-      'Revenue and pipeline follow-up prompts',
-      'Decision support for allocation and tradeoffs',
+      'pyannoteAI runs after each committed pause when configured',
+      'The app attaches speaker turns and loop context back into the mission',
+      'If analysis fails, the local transcript still carries the session forward',
     ],
   },
   {
-    title: 'Spacemaxx',
-    description: 'Your room, desk, and environment shape output.',
+    title: 'Session Memory',
+    description: 'The macOS app keeps the loop inspectable instead of ephemeral.',
     items: [
-      'Desk reset and room maintenance protocols',
-      'Lighting, noise, and layout optimization',
-      'Environment cues that support the routine you want',
+      'Conversation rail with live, captured, and delivered states',
+      'Cycle history plus inspector view for prior plans',
+      'Startup recovery when the previous launch ended uncleanly',
     ],
   },
 ]
 
 const stackSections = [
   {
-    title: 'Signal Capture',
-    description: 'Pull in the inputs that actually shape outcomes.',
+    title: 'Mission Control',
+    description: 'The main dashboard is built around mission, environment, and steering.',
     items: [
-      'Photos, notes, wearables, tasks, budgets, and repos',
-      'Structured logs for habits, routines, and checkpoints',
-      'Human feedback folded into the same loop',
+      'Mission text, loop context, and operator feedback are first-class inputs',
+      'Iteration budgets and decision models are configurable in the UI',
+      'Automation permission state is visible alongside the mission',
     ],
   },
   {
-    title: 'Scoring Layer',
-    description: 'Turn fuzzy self-improvement into legible metrics.',
+    title: 'Transcription Engine',
+    description: 'Speech capture is continuous and built around pause-based commits.',
     items: [
-      'Custom rubrics for each maxx domain',
-      'Baseline, trend, and regression tracking',
-      'Priority scoring so effort goes where it matters',
+      'AVAudioEngine + Speech framework for live recognition',
+      'Silence windows commit utterances into the loop automatically',
+      'Playback echo suppression lets the mic stay live while the app speaks',
     ],
   },
   {
-    title: 'Agent Loops',
-    description: 'Use AI for continuous critique, planning, and execution.',
+    title: 'Planning Core',
+    description: 'Each loop is generated as structured JSON rather than free-form chat.',
     items: [
-      'Personal agents for each surface of life',
-      'Scheduled reviews, nudges, and replans',
-      'Escalation paths when autonomy should stop',
+      'OpenAI Responses API produces the next navigation cycle',
+      'Observe, orient, decide, act, and guide sections stay explicit',
+      'Actions come back with tool names, targets, status, and rationale',
     ],
   },
   {
-    title: 'Open Playbooks',
-    description: 'Share tactics, protocols, and templates publicly.',
+    title: 'Execution Bridge',
+    description: 'The current runtime already executes some actions and plans others.',
     items: [
-      'Community-maintained routines and prompts',
-      'Forkable systems instead of guru black boxes',
-      'Public iteration on what actually works',
+      'Mouse actions execute directly today when permissions allow',
+      '`find_screen_text` resolves labels on screen into coordinates',
+      '`shell_command` is currently planning-only and returned as a concrete suggestion',
     ],
   },
   {
-    title: 'Runtime Flexibility',
-    description: 'Run locally, in the cloud, or on dedicated hardware.',
+    title: 'Permission Gates',
+    description: 'The app is explicit about what macOS will and will not allow.',
     items: [
-      'Laptop-first workflows for builders',
-      'Always-on deployment when you want persistent loops',
-      'Cluster-ready posture for broader coordination',
+      'Accessibility is required before mouse automation can fire',
+      'Screen Recording is required before OCR-based targeting can inspect the desktop',
+      'The runtime surfaces those states in both settings and mission control',
     ],
   },
   {
-    title: 'Operator Control',
-    description: 'Keep people in command of the system.',
+    title: 'Audio Response Layer',
+    description: 'Speech output is integrated into the loop, not bolted on later.',
     items: [
-      'Prompt, model, and policy choices stay visible',
-      'Audit trails for what the agents changed',
-      'Identity and access kept separate from the public thesis',
+      'ElevenLabs or system voice can speak loop output',
+      'Dialogue can be operator-facing, internal-only, or both',
+      'The loop automatically resumes listening after playback finishes',
+    ],
+  },
+  {
+    title: 'Recovery & History',
+    description: 'The session can survive interruptions and stay inspectable.',
+    items: [
+      'Recovery snapshots persist mission, feedback, progress, and status',
+      'Startup assessment asks whether to continue or start fresh',
+      'Cycle history and conversation history remain visible in the app',
     ],
   },
 ]
 
 const coreUnitHeroStats = [
   {
-    label: 'Local Response',
+    label: 'Voice Loop',
     value: '<10ms',
-    detail: 'Local-first compute keeps agent loops immediate across connected systems.',
+    detail: 'The broader XMAXX direction is still about keeping the guided loop close to the machine and responsive in real time.',
   },
   {
     label: 'Acoustic Output',
     value: '0 dB',
-    detail: 'Passive thermal dissipation with no onboard fan.',
+    detail: 'Passive thermal design keeps the node silent beside a desk microphone.',
   },
   {
-    label: 'Average Draw',
+    label: 'Always-On Draw',
     value: '8-15W',
-    detail: 'Auto low-power idle preserves efficiency between workloads.',
+    detail: 'The hardware track stays aimed at an always-available runtime that can keep the loop live without noise or heat drama.',
   },
 ]
 
@@ -262,7 +283,7 @@ const coreUnitHighlights = [
 const coreUnitSpecSections = [
   {
     title: 'Physical Design',
-    description: 'Compact hardware with a quiet, architectural silhouette.',
+    description: 'Compact hardware sized for a desk, shelf, or workstation cluster.',
     rows: [
       ['Form Factor', 'Compact rectangular monolith'],
       ['Material', 'Matte anodized aluminum shell'],
@@ -274,7 +295,7 @@ const coreUnitSpecSections = [
   },
   {
     title: 'Interface & Controls',
-    description: 'Minimal surface language with visible state and no clutter.',
+    description: 'Minimal hardware controls with visible voice-runtime state.',
     rows: [
       ['Top Panel', 'Capacitive touch surface'],
       ['Design', 'No physical buttons'],
@@ -288,17 +309,17 @@ const coreUnitSpecSections = [
   },
   {
     title: 'Performance Core',
-    description: 'Built for continuous local execution, automation, and optimization.',
+    description: 'Built for always-on speech handling, routing, and automation.',
     rows: [
-      ['Processing Type', 'Local-first compute node'],
+      ['Processing Type', 'Local-first voice control node'],
       ['Architecture', 'Multi-core AI-optimized chip'],
-      ['Latency', '<10ms local response'],
+      ['Latency', '<10ms local routing response'],
       ['Cooling', 'Passive thermal dissipation (fanless)'],
     ],
   },
   {
     title: 'Connectivity',
-    description: 'Ready for standalone use or distributed deployment.',
+    description: 'Ready for one desk or a larger voice-control footprint.',
     rows: [
       ['Wireless', 'Wi-Fi 6 / Bluetooth 5.3'],
       ['Rear Ports', 'USB-C (power + data), 2x USB-A, Ethernet (1 Gbps)'],
@@ -307,7 +328,7 @@ const coreUnitSpecSections = [
   },
   {
     title: 'Power',
-    description: 'Lean power profile designed for always-on operation.',
+    description: 'Lean power profile for a voice runtime that stays available.',
     rows: [
       ['Input', 'USB-C PD'],
       ['Power Draw', '8-15W average'],
@@ -315,29 +336,31 @@ const coreUnitSpecSections = [
     ],
   },
   {
-    title: 'System Capabilities',
-    description: 'Core software posture centered on local control and secure scaling.',
+    title: 'Voice Runtime',
+    description: 'Core software posture centered on speech, control, and local trust.',
     items: [
-      'Local AI processing',
-      'Task automation engine',
-      'Multi-domain optimization tracking',
-      'Secure data storage (encrypted)',
+      'Continuous microphone listener with local preprocessing',
+      'Decision-model planning runtime',
+      'Screenshot OCR and coordinate resolution',
+      'Native HID mouse execution bridge',
+      'Secure context storage (encrypted)',
       'Cluster networking (Xmaxx Network ready)',
     ],
   },
   {
     title: 'Security',
-    description: 'Security model favors sovereignty, integrity, and operational trust.',
+    description: 'Security model favors operator visibility and explicit boundaries.',
     id: 'security',
     items: [
-      'End-to-end encryption',
+      'Microphone permission boundaries with visible state',
+      'Approval gates for privileged or destructive actions',
       'Local data priority with no forced cloud dependency',
       'Secure boot architecture',
     ],
   },
   {
     title: 'Operating Conditions',
-    description: 'Sized for desks, shelves, and rack-adjacent installs.',
+    description: 'Sized for desks, shelves, and studio-adjacent installs.',
     rows: [
       ['Temperature Range', '0°C to 40°C'],
       ['Noise', '0 dB (fanless)'],
@@ -348,16 +371,16 @@ const coreUnitSpecSections = [
 
 const coreUnitModes = [
   {
-    title: 'Solo Node',
-    body: 'Personal optimization system for one operator, one environment, and one local control surface.',
+    title: 'Desk Node',
+    body: 'Always-on companion for one computer, one microphone path, and one operator.',
   },
   {
-    title: 'Cluster Mode',
-    body: 'Multi-device coordination across mesh-connected nodes for larger-scale optimization loops.',
+    title: 'Studio Node',
+    body: 'Shared voice relay for workstations, meeting rooms, or creator setups that need a persistent command layer.',
   },
   {
-    title: 'Builder Mode',
-    body: 'Custom workflows, automation pipelines, and developer integration for deeper system extension.',
+    title: 'Builder Node',
+    body: 'Custom adapters, automation policies, and local integrations for teams extending the runtime.',
   },
 ]
 
@@ -488,8 +511,8 @@ function getSiteNavLinks(currentPage) {
   }
 
   return [
-    { href: '/', label: 'Maxxing OS', page: 'home' },
-    { href: '/core-unit', label: 'Core Unit', page: 'core-unit' },
+    { href: '/', label: 'Voice OS', page: 'home' },
+    { href: '/core-unit', label: 'Voice Node', page: 'core-unit' },
     ...accountNavLinks,
   ]
 }
@@ -961,17 +984,23 @@ function SocialLink({ href, label, handle, icon, viewBox, detail }) {
   )
 }
 
-function SoftwareDeck() {
+function VoiceDeck() {
   return (
     <div className="hero-visual__frame hero-visual__frame--software">
-      <div className="maxx-console" aria-label="XMAXX software control deck">
+      <div className="maxx-console" aria-label="XMAXX voice loop control deck">
         <div className="maxx-console__head">
-          <span className="maxx-console__path">maxx://orchestrator</span>
-          <span className="maxx-console__status">8 domains live</span>
+          <span className="maxx-console__path">voice://xmaxx-computer</span>
+          <span className="maxx-console__status">mic active</span>
+        </div>
+
+        <div className="voice-wave" aria-hidden="true">
+          {voiceDeckWaves.map((height, index) => (
+            <span key={`${height}-${index}`} style={{ height }} />
+          ))}
         </div>
 
         <div className="maxx-console__grid">
-          {softwareDeckColumns.map(({ title, items }) => (
+          {voiceDeckColumns.map(({ title, items }) => (
             <section className="maxx-console__column" key={title}>
               <p>{title}</p>
               <ul>
@@ -984,7 +1013,7 @@ function SoftwareDeck() {
         </div>
 
         <div className="maxx-console__events">
-          {softwareDeckEvents.map(({ label, detail }) => (
+          {voiceDeckActions.map(({ label, detail }) => (
             <article className="maxx-console__event" key={label}>
               <span>{label}</span>
               <strong>{detail}</strong>
@@ -1027,15 +1056,16 @@ function HomePage({
     <>
       <section className="hero-panel" id="overview">
         <div className="hero-copy">
-          <p className="eyebrow">Open-source maxxing software</p>
-          <h1>Open-source software for maxxing everything.</h1>
+          <p className="eyebrow">Voice-guided macOS copilot</p>
+          <h1>Control your Mac with voice commands.</h1>
           <p className="hero-copy__lede">
-            XMAXX is the operating system for turning AI into compounding self-improvement
-            loops across looks, physique, sleep, focus, code, money, and environment.
+            XMAXX Computer is a macOS dashboard that keeps a live voice loop open,
+            folds each paused utterance into a guided decision cycle, and can already
+            plan or execute screen-grounded actions.
           </p>
 
-          <div className="verb-strip" aria-label="Maxx surfaces">
-            {maxxTargets.map((target) => (
+          <div className="verb-strip" aria-label="Current macOS app capabilities">
+            {commandTargets.map((target) => (
               <span key={target}>{target}</span>
             ))}
           </div>
@@ -1050,13 +1080,14 @@ function HomePage({
               View GitHub
             </a>
             <a className="button button--ghost" href="/core-unit">
-              See current product
+              See Voice Node
             </a>
           </div>
 
           <p className="hero-copy__support">
-            Think maxxing OS, maxxing AI, XMAXX: a public toolkit for building better
-            routines, better decisions, and better systems with agents in the loop.
+            The current build combines live transcription, decision-model switching,
+            screenshot OCR, native mouse events, spoken replies, and operator approval
+            prompts in one inspectable loop.
           </p>
 
           <div className="hero-stats">
@@ -1071,16 +1102,16 @@ function HomePage({
         </div>
 
         <div className="hero-visual">
-          <SoftwareDeck />
+          <VoiceDeck />
 
           <div className="hero-visual__meta">
             <div>
-              <p className="section-kicker">Maxx surfaces</p>
-              <h2>Looks, code, sleep, money, rooms, routines, and whatever comes next.</h2>
+              <p className="section-kicker">Current runtime</p>
+              <h2>Speak once. XMAXX can hear, plan, ask, click, and answer back.</h2>
             </div>
 
             <div className="hardware-highlights">
-              {maxxTargets.map((item) => (
+              {voiceHighlights.map((item) => (
                 <span key={item}>{item}</span>
               ))}
             </div>
@@ -1091,31 +1122,32 @@ function HomePage({
       <section className="positioning-band" id="manifesto">
         <div>
           <p className="eyebrow">Manifesto</p>
-          <h2>Open-source infrastructure for self-optimization.</h2>
+          <h2>A voice loop for your computer, not just dictation.</h2>
         </div>
 
         <div className="positioning-band__copy">
           <p>
-            Looksmaxxing was the meme. XMAXX turns maxxing into software: measurable,
-            extensible, agent-driven loops that can improve almost any personal or
-            operational surface.
+            The macOS app is already built around a concrete loop: mission, environment,
+            operator feedback, a chosen decision model, an action queue, and a voice
+            channel that keeps steering the plan while it runs.
           </p>
           <p>
-            The point is not a closed guru product. The point is an open system that
-            people can fork, inspect, remix, and use to maxx the parts of life they care
-            about most.
+            It is not pretending to be a magical universal computer controller yet.
+            Today it can transcribe speech, reason through explicit stages, resolve text
+            on screen into coordinates, fire native mouse events, ask for approval, and
+            speak its replies back to the operator.
           </p>
         </div>
       </section>
 
-      <section className="section-block" id="domains">
+      <section className="section-block" id="surfaces">
         <div className="section-heading">
-          <p className="eyebrow">Maxx Domains</p>
-          <h2>Start with looks. Keep going until the whole operating system improves.</h2>
+          <p className="eyebrow">macOS Capabilities</p>
+          <h2>What the current desktop app can already do.</h2>
         </div>
 
         <div className="spec-grid">
-          {maxxDomains.map((section) => (
+          {commandSurfaces.map((section) => (
             <SpecCard key={section.title} {...section} />
           ))}
         </div>
@@ -1123,8 +1155,8 @@ function HomePage({
 
       <section className="section-block" id="stack">
         <div className="section-heading">
-          <p className="eyebrow">Stack</p>
-          <h2>The software stack behind open-source maxxing.</h2>
+          <p className="eyebrow">Runtime</p>
+          <h2>What the current macOS build actually contains.</h2>
         </div>
 
         <div className="spec-grid">
@@ -1136,11 +1168,11 @@ function HomePage({
 
       <section className="section-block">
         <div className="section-heading">
-          <p className="eyebrow">Builder Surface</p>
-          <h2>The authenticated workspace still exists, but it no longer leads the story.</h2>
+          <p className="eyebrow">Operator Access</p>
+          <h2>The authenticated web surface still exists, but the product story starts with the Mac app.</h2>
           <p>
-            Sign in when you want the private operator tools. The public front door now
-            stays focused on the open-source maxxing system itself.
+            Sign in when you want profile and API surfaces. The homepage now stays focused
+            on the actual macOS runtime and the voice-guided loop it already ships.
           </p>
         </div>
 
@@ -1154,12 +1186,12 @@ function HomePage({
       </section>
 
       <section className="closing-panel">
-        <p className="eyebrow">Current Product</p>
-        <h2>The Core Unit stays in the stack, just not at the center of the homepage.</h2>
+        <p className="eyebrow">Voice Node Direction</p>
+        <h2>The Core Unit is the hardware direction for keeping this loop always on.</h2>
         <p>
-          XMAXX Core Unit is still the physical deployment surface for people who want a
-          persistent, fanless, local-first node. Its specs and operating profile now live
-          on their own page.
+          The current shipped software surface is the macOS app. Core Unit is the companion
+          hardware direction around that same loop: persistent voice capture, local routing,
+          and a quieter deployment surface outside the laptop itself.
         </p>
 
         <div className="hardware-highlights">
@@ -1170,7 +1202,7 @@ function HomePage({
 
         <div className="hero-actions">
           <a className="button button--solid" href="/core-unit">
-            Open Core Unit page
+            Open Voice Node page
           </a>
           <a
             className="button button--ghost"
@@ -1193,23 +1225,23 @@ function CoreUnitPage() {
     <>
       <section className="hero-panel" id="product-overview">
         <div className="hero-copy">
-          <p className="eyebrow">Current product surface</p>
-          <h1>XMAXX Core Unit is the dedicated hardware node.</h1>
+          <p className="eyebrow">Hardware direction</p>
+          <h1>XMAXX Core Unit is the companion voice node.</h1>
           <p className="hero-copy__lede">
-            The homepage now centers the open-source maxxing software thesis. This page
-            keeps the current physical product, its hardware posture, and its deployment
-            profile in one place.
+            The current shipped software surface is the macOS app. Core Unit is the hardware
+            direction around the same guided loop: always-on listening, local routing, and
+            a dedicated runtime that does not have to live inside the laptop.
           </p>
 
           <div className="verb-strip" aria-label="Core unit posture">
-            <span>Persistent</span>
+            <span>Always on</span>
             <span>Fanless</span>
-            <span>Local-first</span>
+            <span>Voice loop</span>
           </div>
 
           <div className="hero-actions">
             <a className="button button--solid" href="/">
-              Back to Maxxing OS
+              Back to Voice OS
             </a>
             <a
               className="button button--ghost"
@@ -1242,8 +1274,8 @@ function CoreUnitPage() {
 
           <div className="hero-visual__meta">
             <div>
-              <p className="section-kicker">Hardware Envelope</p>
-              <h2>Agent device. Fanless core. Physical deployment.</h2>
+              <p className="section-kicker">Runtime Envelope</p>
+              <h2>Local speech pipeline, fanless compute, and a physical home for the loop.</h2>
             </div>
 
             <div className="hardware-highlights">
@@ -1259,13 +1291,13 @@ function CoreUnitPage() {
         <p className="eyebrow">Positioning</p>
         <div className="positioning-band__copy">
           <p>
-            XMAXX Core Unit is AI agent hardware built for interface-level operation: a
-            persistent box that can interpret software, move through workflows, and
-            execute actions with controlled autonomy.
+            The macOS app already proves the core interaction model: continuous voice capture,
+            explicit decision stages, OCR-based screen targeting, native mouse execution, and
+            approval-gated actions. Core Unit is about turning that loop into dedicated hardware.
           </p>
           <p>
-            Instead of stitching together scripts and remote sessions, XMAXX turns an
-            agent runtime into a reliable physical product.
+            Instead of keeping the runtime tied to a single desktop session, the node creates
+            a persistent local surface for the same voice-guided computer control stack.
           </p>
         </div>
       </section>
@@ -1273,7 +1305,7 @@ function CoreUnitPage() {
       <section className="section-block" id="specs">
         <div className="section-heading">
           <p className="eyebrow">Specification Matrix</p>
-          <h2>Hardware, runtime, and security posture in one surface.</h2>
+          <h2>Hardware, runtime, and permission posture in one surface.</h2>
         </div>
 
         <div className="spec-grid">
@@ -1285,8 +1317,8 @@ function CoreUnitPage() {
 
       <section className="section-block" id="modes">
         <div className="section-heading">
-          <p className="eyebrow">Use Case Modes</p>
-          <h2>Deploy as a personal node, a clustered network member, or a builder platform.</h2>
+          <p className="eyebrow">Deployment Modes</p>
+          <h2>Deploy as a personal node, a studio relay, or a builder runtime.</h2>
         </div>
 
         <div className="mode-grid">
@@ -1302,10 +1334,11 @@ function CoreUnitPage() {
 
       <section className="closing-panel">
         <p className="eyebrow">Operating Statement</p>
-        <h2>Operational AI, delivered as hardware.</h2>
+        <h2>Voice-guided computer control, delivered as hardware.</h2>
         <p>
-          XMAXX Core Unit is designed to stay on, stay quiet, and run task-level actions
-          from a persistent local-first agent runtime.
+          XMAXX Core Unit is meant to stay on, stay quiet, and host the same guided loop that
+          already exists on macOS, with more room for persistent capture, local routing, and
+          always-available control surfaces.
         </p>
       </section>
 
@@ -1444,7 +1477,7 @@ function App() {
         <a className="brand" href={currentPage === 'home' ? '#overview' : '/'} aria-label="XMAXX home">
           <span className="brand__mark">XMAXX</span>
           <span className="brand__sub">
-            {currentPage === 'core-unit' ? 'Core Unit' : 'Maxxing OS'}
+            {currentPage === 'core-unit' ? 'Voice Node' : 'xmaxx Computer'}
           </span>
         </a>
 
