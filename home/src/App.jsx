@@ -14,6 +14,25 @@ const accountNavLinks = [
   { href: '/access-tokens', label: 'API Access', page: 'access-tokens' },
 ]
 
+const socialLinks = [
+  {
+    href: 'https://github.com/xmaxxai',
+    label: 'GitHub',
+    handle: 'xmaxxai',
+    icon: 'github-icon',
+    viewBox: '0 0 19 19',
+    detail: 'Source and release trail',
+  },
+  {
+    href: 'https://x.com/xmaxxai',
+    label: 'X',
+    handle: 'xmaxxai',
+    icon: 'x-icon',
+    viewBox: '0 0 19 19',
+    detail: 'Signals and launch updates',
+  },
+]
+
 const heroStats = [
   {
     label: 'Local Response',
@@ -713,6 +732,30 @@ function SpecCard({ id, title, description, rows, items, ledStates }) {
   )
 }
 
+function SocialLink({ href, label, handle, icon, viewBox, detail }) {
+  return (
+    <a
+      className="social-link"
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      aria-label={`${label} profile for @${handle}`}
+    >
+      <span className="social-link__icon" aria-hidden="true">
+        <svg viewBox={viewBox}>
+          <use href={`/icons.svg#${icon}`} />
+        </svg>
+      </span>
+
+      <span className="social-link__copy">
+        <strong>{label}</strong>
+        <span>@{handle}</span>
+        <small>{detail}</small>
+      </span>
+    </a>
+  )
+}
+
 function App() {
   const currentPage = getCurrentPage()
   const siteNavLinks = getSiteNavLinks(currentPage)
@@ -985,6 +1028,22 @@ function App() {
                 task-level actions from a persistent local-first agent runtime.
               </p>
             </section>
+
+            <footer className="site-footer" aria-label="XMAXX social links">
+              <div className="site-footer__copy">
+                <p className="eyebrow">Direct Links</p>
+                <p>
+                  Track the public build path, release flow, and live updates from
+                  the XMAXX account surface.
+                </p>
+              </div>
+
+              <div className="site-footer__links">
+                {socialLinks.map((link) => (
+                  <SocialLink key={link.label} {...link} />
+                ))}
+              </div>
+            </footer>
           </>
         )}
       </main>
