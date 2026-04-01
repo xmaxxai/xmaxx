@@ -3,10 +3,18 @@ import { ApiTokensPage, ProfilePage } from './components/ProfileWorkspace'
 import './index.css'
 
 const homeNavLinks = [
-  { href: '#overview', label: 'Overview' },
-  { href: '#specs', label: 'Specs' },
-  { href: '#modes', label: 'Modes' },
-  { href: '#security', label: 'Security' },
+  { href: '#manifesto', label: 'Manifesto', page: 'home' },
+  { href: '#domains', label: 'Domains', page: 'home' },
+  { href: '#stack', label: 'Stack', page: 'home' },
+  { href: '/core-unit', label: 'Core Unit', page: 'core-unit' },
+]
+
+const coreUnitNavLinks = [
+  { href: '/', label: 'Maxxing OS', page: 'home' },
+  { href: '#product-overview', label: 'Overview', page: 'core-unit' },
+  { href: '#specs', label: 'Specs', page: 'core-unit' },
+  { href: '#modes', label: 'Modes', page: 'core-unit' },
+  { href: '#security', label: 'Security', page: 'core-unit' },
 ]
 
 const accountNavLinks = [
@@ -21,7 +29,7 @@ const socialLinks = [
     handle: 'xmaxxai',
     icon: 'github-icon',
     viewBox: '0 0 19 19',
-    detail: 'Source and release trail',
+    detail: 'Source, forks, and public build path',
   },
   {
     href: 'https://x.com/xmaxxai',
@@ -29,11 +37,202 @@ const socialLinks = [
     handle: 'xmaxxai',
     icon: 'x-icon',
     viewBox: '0 0 19 19',
-    detail: 'Signals and launch updates',
+    detail: 'Signals, drops, and live updates',
   },
 ]
 
-const heroStats = [
+const homeHeroStats = [
+  {
+    label: 'Build Posture',
+    value: 'Open',
+    detail: 'Inspectable systems, forkable workflows, and community-owned improvement loops.',
+  },
+  {
+    label: 'Loop Horizon',
+    value: '24/7',
+    detail: 'AI agents can keep scoring, planning, and nudging across the surfaces you want to maxx.',
+  },
+  {
+    label: 'Control Model',
+    value: 'Yours',
+    detail: 'You choose the stack, the metrics, the prompts, and what better actually means.',
+  },
+]
+
+const maxxTargets = [
+  'Looks',
+  'Style',
+  'Physique',
+  'Sleep',
+  'Focus',
+  'Code',
+  'Money',
+  'Space',
+]
+
+const softwareDeckColumns = [
+  {
+    title: 'Inputs',
+    items: ['Photos', 'Biometrics', 'Calendar', 'Spending', 'Codebase', 'Environment'],
+  },
+  {
+    title: 'Agents',
+    items: ['Audit', 'Plan', 'Critique', 'Automate', 'Remind', 'Escalate'],
+  },
+  {
+    title: 'Outputs',
+    items: ['Routines', 'Checklists', 'PRs', 'Protocols', 'Reports', 'Next moves'],
+  },
+]
+
+const softwareDeckEvents = [
+  {
+    label: 'LOOKSMAXX',
+    detail: 'Grooming routine tightened, fit issues flagged, and presentation notes queued.',
+  },
+  {
+    label: 'CODEMAXX',
+    detail: 'Backlog triaged, repo context summarized, and shipping sequence proposed.',
+  },
+  {
+    label: 'SLEEPMAXX',
+    detail: 'Late-night drift detected, recovery plan updated, and tomorrow adjusted.',
+  },
+]
+
+const maxxDomains = [
+  {
+    title: 'Looksmaxx',
+    description: 'Make presentation measurable instead of vague.',
+    items: [
+      'Hair, skin, beard, and grooming audits',
+      'Photo feedback, angles, and profile cleanup',
+      'Routine tracking that compounds visible gains',
+    ],
+  },
+  {
+    title: 'Stylemaxx',
+    description: 'Treat clothes, fit, and personal taste like a system.',
+    items: [
+      'Outfit planning from your actual wardrobe',
+      'Shopping shortlists with fewer bad buys',
+      'Occasion-specific style decision support',
+    ],
+  },
+  {
+    title: 'Physiquemaxx',
+    description: 'Training, recovery, and nutrition loops that close.',
+    items: [
+      'Workout planning around goals and recovery',
+      'Body-comp trend analysis and habit adherence',
+      'Nutrition prompts and meal routine support',
+    ],
+  },
+  {
+    title: 'Sleepmaxx',
+    description: 'Upgrade energy by fixing the quiet bottleneck.',
+    items: [
+      'Sleep timing and drift detection',
+      'Wind-down automation and stimulant guardrails',
+      'Morning readiness scoring and adjustments',
+    ],
+  },
+  {
+    title: 'Focusmaxx',
+    description: 'Reduce chaos and convert intent into action.',
+    items: [
+      'Deep-work block design and interruption control',
+      'Priority compression from noisy task lists',
+      'Daily review loops that stop drift early',
+    ],
+  },
+  {
+    title: 'Codemaxx',
+    description: 'Aim AI at the repo, not just the prompt box.',
+    items: [
+      'Codebase summaries, task decomposition, and patch plans',
+      'PR drafting, review prep, and issue triage',
+      'Local tooling for faster engineering loops',
+    ],
+  },
+  {
+    title: 'Moneymaxx',
+    description: 'Point AI at leverage, waste, and opportunity.',
+    items: [
+      'Spending reviews and pattern detection',
+      'Revenue and pipeline follow-up prompts',
+      'Decision support for allocation and tradeoffs',
+    ],
+  },
+  {
+    title: 'Spacemaxx',
+    description: 'Your room, desk, and environment shape output.',
+    items: [
+      'Desk reset and room maintenance protocols',
+      'Lighting, noise, and layout optimization',
+      'Environment cues that support the routine you want',
+    ],
+  },
+]
+
+const stackSections = [
+  {
+    title: 'Signal Capture',
+    description: 'Pull in the inputs that actually shape outcomes.',
+    items: [
+      'Photos, notes, wearables, tasks, budgets, and repos',
+      'Structured logs for habits, routines, and checkpoints',
+      'Human feedback folded into the same loop',
+    ],
+  },
+  {
+    title: 'Scoring Layer',
+    description: 'Turn fuzzy self-improvement into legible metrics.',
+    items: [
+      'Custom rubrics for each maxx domain',
+      'Baseline, trend, and regression tracking',
+      'Priority scoring so effort goes where it matters',
+    ],
+  },
+  {
+    title: 'Agent Loops',
+    description: 'Use AI for continuous critique, planning, and execution.',
+    items: [
+      'Personal agents for each surface of life',
+      'Scheduled reviews, nudges, and replans',
+      'Escalation paths when autonomy should stop',
+    ],
+  },
+  {
+    title: 'Open Playbooks',
+    description: 'Share tactics, protocols, and templates publicly.',
+    items: [
+      'Community-maintained routines and prompts',
+      'Forkable systems instead of guru black boxes',
+      'Public iteration on what actually works',
+    ],
+  },
+  {
+    title: 'Runtime Flexibility',
+    description: 'Run locally, in the cloud, or on dedicated hardware.',
+    items: [
+      'Laptop-first workflows for builders',
+      'Always-on deployment when you want persistent loops',
+      'Cluster-ready posture for broader coordination',
+    ],
+  },
+  {
+    title: 'Operator Control',
+    description: 'Keep people in command of the system.',
+    items: [
+      'Prompt, model, and policy choices stay visible',
+      'Audit trails for what the agents changed',
+      'Identity and access kept separate from the public thesis',
+    ],
+  },
+]
+
+const coreUnitHeroStats = [
   {
     label: 'Local Response',
     value: '<10ms',
@@ -51,7 +250,7 @@ const heroStats = [
   },
 ]
 
-const hardwareHighlights = [
+const coreUnitHighlights = [
   '180 x 110 x 95 mm',
   '1.2 kg',
   'Wi-Fi 6',
@@ -60,7 +259,7 @@ const hardwareHighlights = [
   'Cluster ready',
 ]
 
-const specSections = [
+const coreUnitSpecSections = [
   {
     title: 'Physical Design',
     description: 'Compact hardware with a quiet, architectural silhouette.',
@@ -147,7 +346,7 @@ const specSections = [
   },
 ]
 
-const modes = [
+const coreUnitModes = [
   {
     title: 'Solo Node',
     body: 'Personal optimization system for one operator, one environment, and one local control surface.',
@@ -264,6 +463,10 @@ function getCurrentPage() {
 
   const pathname = window.location.pathname.replace(/\/+$/, '') || '/'
 
+  if (pathname === '/core-unit') {
+    return 'core-unit'
+  }
+
   if (pathname === '/profile') {
     return 'profile'
   }
@@ -277,14 +480,16 @@ function getCurrentPage() {
 
 function getSiteNavLinks(currentPage) {
   if (currentPage === 'home') {
-    return [
-      ...homeNavLinks.map((link) => ({ ...link, page: 'home' })),
-      ...accountNavLinks,
-    ]
+    return [...homeNavLinks, ...accountNavLinks]
+  }
+
+  if (currentPage === 'core-unit') {
+    return [...coreUnitNavLinks, ...accountNavLinks]
   }
 
   return [
-    { href: '/', label: 'Home', page: 'home' },
+    { href: '/', label: 'Maxxing OS', page: 'home' },
+    { href: '/core-unit', label: 'Core Unit', page: 'core-unit' },
     ...accountNavLinks,
   ]
 }
@@ -756,6 +961,359 @@ function SocialLink({ href, label, handle, icon, viewBox, detail }) {
   )
 }
 
+function SoftwareDeck() {
+  return (
+    <div className="hero-visual__frame hero-visual__frame--software">
+      <div className="maxx-console" aria-label="XMAXX software control deck">
+        <div className="maxx-console__head">
+          <span className="maxx-console__path">maxx://orchestrator</span>
+          <span className="maxx-console__status">8 domains live</span>
+        </div>
+
+        <div className="maxx-console__grid">
+          {softwareDeckColumns.map(({ title, items }) => (
+            <section className="maxx-console__column" key={title}>
+              <p>{title}</p>
+              <ul>
+                {items.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            </section>
+          ))}
+        </div>
+
+        <div className="maxx-console__events">
+          {softwareDeckEvents.map(({ label, detail }) => (
+            <article className="maxx-console__event" key={label}>
+              <span>{label}</span>
+              <strong>{detail}</strong>
+            </article>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function SiteFooter() {
+  return (
+    <footer className="site-footer" aria-label="XMAXX social links">
+      <div className="site-footer__copy">
+        <p className="eyebrow">Direct Links</p>
+        <p>
+          Track the public build path, release flow, and live updates from the XMAXX
+          account surface.
+        </p>
+      </div>
+
+      <div className="site-footer__links">
+        {socialLinks.map((link) => (
+          <SocialLink key={link.label} {...link} />
+        ))}
+      </div>
+    </footer>
+  )
+}
+
+function HomePage({
+  authState,
+  authNotice,
+  onOpenLogin,
+  onLogout,
+  authBusyProvider,
+}) {
+  return (
+    <>
+      <section className="hero-panel" id="overview">
+        <div className="hero-copy">
+          <p className="eyebrow">Open-source maxxing software</p>
+          <h1>Open-source software for maxxing everything.</h1>
+          <p className="hero-copy__lede">
+            XMAXX is the operating system for turning AI into compounding self-improvement
+            loops across looks, physique, sleep, focus, code, money, and environment.
+          </p>
+
+          <div className="verb-strip" aria-label="Maxx surfaces">
+            {maxxTargets.map((target) => (
+              <span key={target}>{target}</span>
+            ))}
+          </div>
+
+          <div className="hero-actions">
+            <a
+              className="button button--solid"
+              href="https://github.com/xmaxxai"
+              target="_blank"
+              rel="noreferrer"
+            >
+              View GitHub
+            </a>
+            <a className="button button--ghost" href="/core-unit">
+              See current product
+            </a>
+          </div>
+
+          <p className="hero-copy__support">
+            Think maxxing OS, maxxing AI, XMAXX: a public toolkit for building better
+            routines, better decisions, and better systems with agents in the loop.
+          </p>
+
+          <div className="hero-stats">
+            {homeHeroStats.map(({ label, value, detail }) => (
+              <article className="hero-stat" key={label}>
+                <p>{label}</p>
+                <strong>{value}</strong>
+                <span>{detail}</span>
+              </article>
+            ))}
+          </div>
+        </div>
+
+        <div className="hero-visual">
+          <SoftwareDeck />
+
+          <div className="hero-visual__meta">
+            <div>
+              <p className="section-kicker">Maxx surfaces</p>
+              <h2>Looks, code, sleep, money, rooms, routines, and whatever comes next.</h2>
+            </div>
+
+            <div className="hardware-highlights">
+              {maxxTargets.map((item) => (
+                <span key={item}>{item}</span>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="positioning-band" id="manifesto">
+        <div>
+          <p className="eyebrow">Manifesto</p>
+          <h2>Open-source infrastructure for self-optimization.</h2>
+        </div>
+
+        <div className="positioning-band__copy">
+          <p>
+            Looksmaxxing was the meme. XMAXX turns maxxing into software: measurable,
+            extensible, agent-driven loops that can improve almost any personal or
+            operational surface.
+          </p>
+          <p>
+            The point is not a closed guru product. The point is an open system that
+            people can fork, inspect, remix, and use to maxx the parts of life they care
+            about most.
+          </p>
+        </div>
+      </section>
+
+      <section className="section-block" id="domains">
+        <div className="section-heading">
+          <p className="eyebrow">Maxx Domains</p>
+          <h2>Start with looks. Keep going until the whole operating system improves.</h2>
+        </div>
+
+        <div className="spec-grid">
+          {maxxDomains.map((section) => (
+            <SpecCard key={section.title} {...section} />
+          ))}
+        </div>
+      </section>
+
+      <section className="section-block" id="stack">
+        <div className="section-heading">
+          <p className="eyebrow">Stack</p>
+          <h2>The software stack behind open-source maxxing.</h2>
+        </div>
+
+        <div className="spec-grid">
+          {stackSections.map((section) => (
+            <SpecCard key={section.title} {...section} />
+          ))}
+        </div>
+      </section>
+
+      <section className="section-block">
+        <div className="section-heading">
+          <p className="eyebrow">Builder Surface</p>
+          <h2>The authenticated workspace still exists, but it no longer leads the story.</h2>
+          <p>
+            Sign in when you want the private operator tools. The public front door now
+            stays focused on the open-source maxxing system itself.
+          </p>
+        </div>
+
+        <AccessPanel
+          authState={authState}
+          notice={authNotice}
+          onOpenLogin={onOpenLogin}
+          onLogout={onLogout}
+          busyProvider={authBusyProvider}
+        />
+      </section>
+
+      <section className="closing-panel">
+        <p className="eyebrow">Current Product</p>
+        <h2>The Core Unit stays in the stack, just not at the center of the homepage.</h2>
+        <p>
+          XMAXX Core Unit is still the physical deployment surface for people who want a
+          persistent, fanless, local-first node. Its specs and operating profile now live
+          on their own page.
+        </p>
+
+        <div className="hardware-highlights">
+          {coreUnitHighlights.map((item) => (
+            <span key={item}>{item}</span>
+          ))}
+        </div>
+
+        <div className="hero-actions">
+          <a className="button button--solid" href="/core-unit">
+            Open Core Unit page
+          </a>
+          <a
+            className="button button--ghost"
+            href="https://github.com/xmaxxai"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Track the repo
+          </a>
+        </div>
+      </section>
+
+      <SiteFooter />
+    </>
+  )
+}
+
+function CoreUnitPage() {
+  return (
+    <>
+      <section className="hero-panel" id="product-overview">
+        <div className="hero-copy">
+          <p className="eyebrow">Current product surface</p>
+          <h1>XMAXX Core Unit is the dedicated hardware node.</h1>
+          <p className="hero-copy__lede">
+            The homepage now centers the open-source maxxing software thesis. This page
+            keeps the current physical product, its hardware posture, and its deployment
+            profile in one place.
+          </p>
+
+          <div className="verb-strip" aria-label="Core unit posture">
+            <span>Persistent</span>
+            <span>Fanless</span>
+            <span>Local-first</span>
+          </div>
+
+          <div className="hero-actions">
+            <a className="button button--solid" href="/">
+              Back to Maxxing OS
+            </a>
+            <a
+              className="button button--ghost"
+              href="https://github.com/xmaxxai"
+              target="_blank"
+              rel="noreferrer"
+            >
+              View GitHub
+            </a>
+          </div>
+
+          <div className="hero-stats">
+            {coreUnitHeroStats.map(({ label, value, detail }) => (
+              <article className="hero-stat" key={label}>
+                <p>{label}</p>
+                <strong>{value}</strong>
+                <span>{detail}</span>
+              </article>
+            ))}
+          </div>
+        </div>
+
+        <div className="hero-visual">
+          <div className="hero-visual__frame">
+            <img
+              src="/waterbox.png"
+              alt="XMAXX Core Unit in stealth black with blue LED perimeter strip"
+            />
+          </div>
+
+          <div className="hero-visual__meta">
+            <div>
+              <p className="section-kicker">Hardware Envelope</p>
+              <h2>Agent device. Fanless core. Physical deployment.</h2>
+            </div>
+
+            <div className="hardware-highlights">
+              {coreUnitHighlights.map((item) => (
+                <span key={item}>{item}</span>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="positioning-band">
+        <p className="eyebrow">Positioning</p>
+        <div className="positioning-band__copy">
+          <p>
+            XMAXX Core Unit is AI agent hardware built for interface-level operation: a
+            persistent box that can interpret software, move through workflows, and
+            execute actions with controlled autonomy.
+          </p>
+          <p>
+            Instead of stitching together scripts and remote sessions, XMAXX turns an
+            agent runtime into a reliable physical product.
+          </p>
+        </div>
+      </section>
+
+      <section className="section-block" id="specs">
+        <div className="section-heading">
+          <p className="eyebrow">Specification Matrix</p>
+          <h2>Hardware, runtime, and security posture in one surface.</h2>
+        </div>
+
+        <div className="spec-grid">
+          {coreUnitSpecSections.map((section) => (
+            <SpecCard key={section.title} {...section} />
+          ))}
+        </div>
+      </section>
+
+      <section className="section-block" id="modes">
+        <div className="section-heading">
+          <p className="eyebrow">Use Case Modes</p>
+          <h2>Deploy as a personal node, a clustered network member, or a builder platform.</h2>
+        </div>
+
+        <div className="mode-grid">
+          {coreUnitModes.map(({ title, body }) => (
+            <article className="mode-card" key={title}>
+              <p className="section-kicker">Mode</p>
+              <h3>{title}</h3>
+              <p>{body}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="closing-panel">
+        <p className="eyebrow">Operating Statement</p>
+        <h2>Operational AI, delivered as hardware.</h2>
+        <p>
+          XMAXX Core Unit is designed to stay on, stay quiet, and run task-level actions
+          from a persistent local-first agent runtime.
+        </p>
+      </section>
+
+      <SiteFooter />
+    </>
+  )
+}
+
 function App() {
   const currentPage = getCurrentPage()
   const siteNavLinks = getSiteNavLinks(currentPage)
@@ -885,7 +1443,9 @@ function App() {
       <header className="site-header">
         <a className="brand" href={currentPage === 'home' ? '#overview' : '/'} aria-label="XMAXX home">
           <span className="brand__mark">XMAXX</span>
-          <span className="brand__sub">Core Unit</span>
+          <span className="brand__sub">
+            {currentPage === 'core-unit' ? 'Core Unit' : 'Maxxing OS'}
+          </span>
         </a>
 
         <nav className="site-nav" aria-label="Page sections">
@@ -916,135 +1476,16 @@ function App() {
           <ProfilePage authState={authState} onOpenLogin={handleOpenLogin} />
         ) : currentPage === 'access-tokens' ? (
           <ApiTokensPage authState={authState} onOpenLogin={handleOpenLogin} />
+        ) : currentPage === 'core-unit' ? (
+          <CoreUnitPage />
         ) : (
-          <>
-            <section className="hero-panel" id="overview">
-              <div className="hero-copy">
-                <p className="eyebrow">Autonomous Agent Device — XMAXX Core Unit</p>
-                <h1>The most clever device ever made.</h1>
-                <p className="hero-copy__lede">
-                  Built to see, reason, and operate software for you. Join the
-                  community. Own one today.
-                </p>
-
-                <div className="verb-strip" aria-label="System purpose">
-                  <span>See</span>
-                  <span>Reason</span>
-                  <span>Operate</span>
-                </div>
-
-                <AccessPanel
-                  authState={authState}
-                  notice={authNotice}
-                  onOpenLogin={handleOpenLogin}
-                  onLogout={handleLogout}
-                  busyProvider={authBusyProvider}
-                />
-
-                <div className="hero-stats">
-                  {heroStats.map(({ label, value, detail }) => (
-                    <article className="hero-stat" key={label}>
-                      <p>{label}</p>
-                      <strong>{value}</strong>
-                      <span>{detail}</span>
-                    </article>
-                  ))}
-                </div>
-              </div>
-
-              <div className="hero-visual">
-                <div className="hero-visual__frame">
-                  <img
-                    src="/waterbox.png"
-                    alt="XMAXX Core Unit in stealth black with blue LED perimeter strip"
-                  />
-                </div>
-
-                <div className="hero-visual__meta">
-                  <div>
-                    <p className="section-kicker">Hardware Envelope</p>
-                    <h2>Agent device. Fanless core. Physical deployment.</h2>
-                  </div>
-
-                  <div className="hardware-highlights">
-                    {hardwareHighlights.map((item) => (
-                      <span key={item}>{item}</span>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            <section className="positioning-band">
-              <p className="eyebrow">Positioning</p>
-              <div className="positioning-band__copy">
-                <p>
-                  XMAXX Core Unit is AI agent hardware built for interface-level
-                  operation: a persistent box that can interpret software, move
-                  through workflows, and execute actions with controlled autonomy.
-                </p>
-                <p>
-                  Instead of stitching together scripts and remote sessions, XMAXX
-                  turns an agent runtime into a reliable physical product.
-                </p>
-              </div>
-            </section>
-
-            <section className="section-block" id="specs">
-              <div className="section-heading">
-                <p className="eyebrow">Specification Matrix</p>
-                <h2>Hardware, runtime, and security posture in one surface.</h2>
-              </div>
-
-              <div className="spec-grid">
-                {specSections.map((section) => (
-                  <SpecCard key={section.title} {...section} />
-                ))}
-              </div>
-            </section>
-
-            <section className="section-block" id="modes">
-              <div className="section-heading">
-                <p className="eyebrow">Use Case Modes</p>
-                <h2>Deploy as a personal node, a clustered network member, or a builder platform.</h2>
-              </div>
-
-              <div className="mode-grid">
-                {modes.map(({ title, body }) => (
-                  <article className="mode-card" key={title}>
-                    <p className="section-kicker">Mode</p>
-                    <h3>{title}</h3>
-                    <p>{body}</p>
-                  </article>
-                ))}
-              </div>
-            </section>
-
-            <section className="closing-panel">
-              <p className="eyebrow">Operating Statement</p>
-              <h2>Operational AI, delivered as hardware.</h2>
-              <p>
-                XMAXX Core Unit is designed to stay on, stay quiet, and run
-                task-level actions from a persistent local-first agent runtime.
-              </p>
-            </section>
-
-            <footer className="site-footer" aria-label="XMAXX social links">
-              <div className="site-footer__copy">
-                <p className="eyebrow">Direct Links</p>
-                <p>
-                  Track the public build path, release flow, and live updates from
-                  the XMAXX account surface.
-                </p>
-              </div>
-
-              <div className="site-footer__links">
-                {socialLinks.map((link) => (
-                  <SocialLink key={link.label} {...link} />
-                ))}
-              </div>
-            </footer>
-          </>
+          <HomePage
+            authState={authState}
+            authNotice={authNotice}
+            onOpenLogin={handleOpenLogin}
+            onLogout={handleLogout}
+            authBusyProvider={authBusyProvider}
+          />
         )}
       </main>
 
