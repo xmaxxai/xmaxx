@@ -1301,6 +1301,8 @@ private struct OperatorPromptCard: View {
             return Color(red: 0.98, green: 0.74, blue: 0.28)
         case .checkpoint:
             return Color(red: 0.55, green: 0.84, blue: 0.65)
+        case .question:
+            return Color(red: 0.95, green: 0.50, blue: 0.32)
         }
     }
 

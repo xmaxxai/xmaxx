@@ -325,12 +325,13 @@ enum OperatorPromptKind: String, Hashable {
     case startupAssessment
     case actionApproval
     case checkpoint
+    case question
 
     var blocksLoop: Bool {
         switch self {
         case .startupAssessment:
             return false
-        case .actionApproval, .checkpoint:
+        case .actionApproval, .checkpoint, .question:
             return true
         }
     }
@@ -525,8 +526,45 @@ struct NavigationCycle: Identifiable, Hashable {
     let objectiveMet: Bool
     let isBlocked: Bool
     let blocker: String?
+    let operatorMessage: String?
+    let internalMessage: String?
+    let decisionNote: String?
     let sections: [NavigationSection]
     let actions: [ActionItem]
+
+    init(
+        iteration: Int,
+        createdAt: Date,
+        mission: String,
+        environment: String,
+        summary: String,
+        model: String,
+        progress: Double,
+        objectiveMet: Bool,
+        isBlocked: Bool,
+        blocker: String?,
+        operatorMessage: String? = nil,
+        internalMessage: String? = nil,
+        decisionNote: String? = nil,
+        sections: [NavigationSection],
+        actions: [ActionItem]
+    ) {
+        self.iteration = iteration
+        self.createdAt = createdAt
+        self.mission = mission
+        self.environment = environment
+        self.summary = summary
+        self.model = model
+        self.progress = progress
+        self.objectiveMet = objectiveMet
+        self.isBlocked = isBlocked
+        self.blocker = blocker
+        self.operatorMessage = operatorMessage
+        self.internalMessage = internalMessage
+        self.decisionNote = decisionNote
+        self.sections = sections
+        self.actions = actions
+    }
 }
 
 struct ActionGraphNode: Identifiable, Hashable {
@@ -1140,12 +1178,12 @@ final class AppStore: ObservableObject {
             detail: "A previous session was found after launch. Confirm whether xmaxx should continue from that state or start fresh.",
             transcript: nil
         )
-        recordComputerDialogue(
-            external: prompt.question,
-            internal: prompt.detail,
-            note: "Startup recovery check after launch."
-        )
         presentOperatorPrompt(prompt)
+        deliverDialogue(
+            external: prompt.question,
+            internal: "Startup recovery check after launch.",
+            note: prompt.detail
+        )
         startupRecoverySnapshot = nil
         previousLaunchEndedUncleanly = false
     }
@@ -2135,6 +2173,10 @@ final class AppStore: ObservableObject {
             detail = result.decision == .proceed
                 ? "Checkpoint approved."
                 : "Checkpoint paused for more feedback."
+        case .question:
+            detail = result.decision == .proceed
+                ? "Answered the planner's question."
+                : "Paused before answering the planner's question."
         }
 
         appendConversationEntry(
@@ -2173,7 +2215,7 @@ final class AppStore: ObservableObject {
             )
             persistRecoverySnapshot()
 
-        case .actionApproval, .checkpoint:
+        case .actionApproval, .checkpoint, .question:
             break
         }
     }
@@ -2256,6 +2298,46 @@ final class AppStore: ObservableObject {
             actionQueue = result.actions
             objectiveProgress = result.progress
 
+            let operatorQuestion = result.operatorQuestion?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+            if !result.objectiveMet && result.needsOperatorInput && !operatorQuestion.isEmpty {
+                let prompt = OperatorPrompt(
+                    kind: .question,
+                    title: "Need Operator Input",
+                    question: operatorQuestion,
+                    detail: result.decisionTrace.note,
+                    proceedLabel: "Submit Answer",
+                    reviseLabel: "Pause Loop",
+                    responsePlaceholder: "Answer the question or add a new constraint",
+                    requiresResponse: true
+                )
+                status = .ready
+                statusMessage = prompt.question
+                deliverDialogue(
+                    external: prompt.question,
+                    internal: result.internalMessage,
+                    note: prompt.detail
+                )
+
+                let answerResult = await waitForOperatorPrompt(prompt)
+                try Task.checkCancellation()
+
+                if answerResult.decision == .revise {
+                    status = .ready
+                    statusMessage = "Loop paused while waiting for operator input."
+                    loopTask = nil
+                    scheduleMissionListeningRestartIfNeeded()
+                    return
+                }
+
+                if shouldReplanAfterOperatorPrompt(answerResult) {
+                    status = .running
+                    statusMessage = "Operator input received. Replanning with the latest answer."
+                    continue
+                }
+            }
+
             if !result.objectiveMet && !result.isBlocked && requiresActionConfirmation(for: result.actions) {
                 let prompt = OperatorPrompt(
                     kind: .actionApproval,
@@ -2267,7 +2349,7 @@ final class AppStore: ObservableObject {
                 )
                 status = .ready
                 statusMessage = prompt.question
-                recordComputerDialogue(
+                deliverDialogue(
                     external: prompt.question,
                     internal: "Waiting for action confirmation on cycle \(iteration). Fresh operator speech will revise the plan before any action executes.",
                     note: prompt.detail
@@ -2296,7 +2378,7 @@ final class AppStore: ObservableObject {
                 )
                 status = .ready
                 statusMessage = prompt.question
-                recordComputerDialogue(
+                deliverDialogue(
                     external: prompt.question,
                     internal: "Checkpoint requested on cycle \(iteration) because the current plan is a longer multi-step act.",
                     note: prompt.detail
@@ -2337,6 +2419,9 @@ final class AppStore: ObservableObject {
                 objectiveMet: result.objectiveMet,
                 isBlocked: result.isBlocked || !(runtimeBlocker ?? "").isEmpty,
                 blocker: runtimeBlocker ?? result.blocker,
+                operatorMessage: result.operatorMessage,
+                internalMessage: result.internalMessage,
+                decisionNote: result.decisionTrace.note,
                 sections: result.sections,
                 actions: executedActions
             )
@@ -2350,7 +2435,8 @@ final class AppStore: ObservableObject {
             persistRecoverySnapshot()
             deliverDialogue(
                 external: cycle.externalDialogue,
-                internal: cycle.internalDialogue
+                internal: cycle.internalDialogue,
+                note: cycle.dialogueNote
             )
 
             if cycle.objectiveMet {
@@ -2420,8 +2506,12 @@ final class AppStore: ObservableObject {
         }
     }
 
-    private func deliverDialogue(external: String, internal internalText: String) {
-        recordComputerDialogue(external: external, internal: internalText)
+    private func deliverDialogue(
+        external: String,
+        internal internalText: String,
+        note: String? = nil
+    ) {
+        recordComputerDialogue(external: external, internal: internalText, note: note)
 
         guard audioResponsesEnabled else { return }
 
@@ -2731,6 +2821,10 @@ final class AppStore: ObservableObject {
 
 private extension NavigationCycle {
     var externalDialogue: String {
+        if let operatorMessage, !operatorMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return operatorMessage
+        }
+
         let actionTitles = actions.prefix(2).map(\.title).joined(separator: ", ")
 
         guard !actionTitles.isEmpty else {
@@ -2741,6 +2835,10 @@ private extension NavigationCycle {
     }
 
     var internalDialogue: String {
+        if let internalMessage, !internalMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return internalMessage
+        }
+
         let openingStage = sections.first(where: { $0.phase == .observe })
         let closingStage = sections.first(where: { $0.phase == .guide })
         let openingTitle = openingStage?.stageTitle ?? "Opening"
@@ -2754,6 +2852,11 @@ private extension NavigationCycle {
         }
 
         return "Cycle \(iteration). \(openingTitle): \(openingHeadline). \(closingTitle): \(closingHeadline). Planned actions: \(actionTools). Progress is \(Int(progress * 100)) percent."
+    }
+
+    var dialogueNote: String? {
+        let trimmedNote = decisionNote?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmedNote.isEmpty ? nil : trimmedNote
     }
 }
 
@@ -2890,6 +2993,11 @@ private struct GeneratedLoop {
     let objectiveMet: Bool
     let isBlocked: Bool
     let blocker: String?
+    let operatorMessage: String
+    let internalMessage: String
+    let needsOperatorInput: Bool
+    let operatorQuestion: String?
+    let decisionTrace: DecisionTraceResponse
     let sections: [NavigationSection]
     let actions: [ActionItem]
 }
@@ -2918,14 +3026,17 @@ private struct OpenAIClient {
         }.joined(separator: "\n")
 
         let systemPrompt = """
-        You are driving an autonomous x-maxx guided loop for a desktop computer-use copilot.
-        Return JSON only.
+        You are the planning core for xmaxx, a live macOS desktop copilot.
+        Return JSON only and match the requested schema exactly.
         Use grounded reasoning. If information is missing, say that directly instead of inventing facts.
         Goal: maximize progress toward objective x, where x is the user's mission.
-        The guided cycle should continue until the objective is met, the agent is blocked, or the iteration budget is exhausted.
+        Produce one decisive guided cycle, not generic strategy commentary.
         Treat operator feedback as live steering from the human. If it changes priorities, constraints, or desired direction, adapt immediately in the next iteration instead of continuing the old plan.
         Keep the loop steerable: prefer small, reversible next moves over long speculative plans when live steering is present.
-        If the mission or latest steering is ambiguous, say exactly what clarification is needed.
+        Every narrative field must reference the actual mission, environment, operator feedback, or prior runtime outputs.
+        If the mission or latest steering is ambiguous, set needs_operator_input true, put the exact question in operator_question, and explain in decision_trace why that answer is needed now.
+        operator_message is what xmaxx should say out loud to the human right now.
+        internal_message is xmaxx's terse private reasoning note for the app log.
         Active decision model surface: \(decisionProfile.title).
         Selected model lenses: \(decisionProfile.selectedModelLine).
         \(decisionProfile.promptContext)
@@ -2935,10 +3046,21 @@ private struct OpenAIClient {
         Required JSON shape:
         {
           "summary": "string",
+          "operator_message": "string",
+          "internal_message": "string",
           "progress": 0.0,
           "objective_met": false,
           "blocked": false,
           "blocker": "string or null",
+          "needs_operator_input": false,
+          "operator_question": "string or null",
+          "decision_trace": {
+            "situation": "string",
+            "intent": "string",
+            "why_now": "string",
+            "risk": "string",
+            "success_signal": "string"
+          },
           "observe": { "headline": "string", "narrative": "string", "bullets": ["string"], "confidence": 0.0 },
           "orient": { "headline": "string", "narrative": "string", "bullets": ["string"], "confidence": 0.0 },
           "decide": { "headline": "string", "narrative": "string", "bullets": ["string"], "confidence": 0.0 },
@@ -2949,9 +3071,12 @@ private struct OpenAIClient {
           ]
         }
 
-        Keep bullets concise. Prefer 2 to 4 bullets per section and 3 to 6 actions total.
+        Keep bullets concise. Prefer 2 to 4 bullets per section and 1 to 5 actions total.
         Set "objective_met" true only when the objective is actually achieved within the known context.
         Set "blocked" true only when the next step cannot proceed without missing tooling, permissions, or new human input.
+        If "blocked" is false, set "blocker" to null.
+        If "needs_operator_input" is false, set "operator_question" to null.
+        If "needs_operator_input" is true, ask one concrete question, keep it short, and avoid pretending the answer is already known.
         "progress" must be a number from 0.0 to 1.0 showing estimated distance closed toward the mission.
         Available executable tools right now are mouse_move, mouse_click, mouse_right_click, and find_screen_text.
         You may also return shell_command as a planning-only action. When you use shell_command, put the exact CLI command string in target and prefer queued status because the current macOS build does not auto-execute shell commands yet.
@@ -2961,6 +3086,7 @@ private struct OpenAIClient {
         A real automation executor exists for those mouse tools. Do not claim automation is unavailable when coordinates or searchable visible text and Accessibility permission are available.
         Only mark the loop blocked for automation when coordinates are missing, Accessibility permission is missing, or a real tool execution error occurs.
         Treat prior action outputs as ground truth. Do not repeat the same blocked action with the same target unless the new cycle explains what changed.
+        Actions must be in execution order. Mark only the immediate next executable step as ready. Keep downstream or contingent steps queued.
         """
 
         let operatorName = profileName.isEmpty ? "Operator" : profileName
@@ -3002,7 +3128,9 @@ private struct OpenAIClient {
         Prior cycles:
         \(historySummary)
 
-        Produce the next guided cycle for this app. This is a macOS desktop copilot dashboard. It can plan through ChatGPT, it has a limited real automation executor for coordinate-based mouse actions, and it can resolve coordinates from screenshots when the target is visible text and Screen Recording permission is granted. Make the output useful, specific, and honest about gaps. Push the loop forward instead of repeating generic advice. Assume operator feedback may have arrived while the cycle was already running, and give it priority over stale earlier plans.
+        Produce the next guided cycle for this app. This is a macOS desktop copilot dashboard. It can plan through ChatGPT, it has a limited real automation executor for coordinate-based mouse actions, and it can resolve coordinates from screenshots when the target is visible text and Screen Recording permission is granted.
+        Make the output useful, specific, and honest about gaps. Push the loop forward instead of repeating generic advice. Assume operator feedback may have arrived while the cycle was already running, and give it priority over stale earlier plans.
+        Choose the best immediate move, explain why it is the best immediate move, and give xmaxx a speakable operator_message.
         """
 
         var request = URLRequest(url: url)
@@ -3022,7 +3150,12 @@ private struct OpenAIClient {
                     content: [.init(type: "input_text", text: userPrompt)]
                 )
             ],
-            text: .init(format: .init(type: "json_object"))
+            text: .init(format: .init(
+                type: "json_schema",
+                name: "xmaxx_guided_cycle",
+                strict: true,
+                schema: LoopResponse.jsonSchema
+            ))
         )
 
         request.httpBody = try JSONEncoder().encode(body)
@@ -3061,6 +3194,11 @@ private struct OpenAIClient {
             objectiveMet: loopResponse.objectiveMet,
             isBlocked: loopResponse.blocked,
             blocker: loopResponse.blocker,
+            operatorMessage: loopResponse.operatorMessage,
+            internalMessage: loopResponse.internalMessage,
+            needsOperatorInput: loopResponse.needsOperatorInput,
+            operatorQuestion: loopResponse.operatorQuestion,
+            decisionTrace: loopResponse.decisionTrace,
             sections: [
                 loopResponse.observe.makeSection(using: decisionProfile.stage(for: .observe)),
                 loopResponse.orient.makeSection(using: decisionProfile.stage(for: .orient)),
@@ -3387,8 +3525,10 @@ private struct MissionCapture {
 }
 
 private final class MissionTranscriber {
-    private let silenceCommitDelayNanoseconds: UInt64 = 180_000_000
+    private let silenceCommitDelayNanoseconds: UInt64 = 320_000_000
     private let playbackEchoFilterDuration: TimeInterval = 0.7
+    private let voiceActivityFloor: Float = 0.003
+    private let voiceActivityPeakFloor: Float = 0.015
     private let audioEngine = AVAudioEngine()
     private let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
     private let audioCaptureQueue = DispatchQueue(label: "AthenaLive.xmaxx.audioCapture")
@@ -3408,6 +3548,7 @@ private final class MissionTranscriber {
     private var playbackEchoReference = ""
     private var playbackEchoDeadline = Date.distantPast
     private var captureAudioForAnalysis = false
+    private var lastSpeechActivityNanoseconds: UInt64 = 0
     private var currentUtterancePCM = Data()
     private var currentUtteranceSampleRate: Double = 16_000
     private var currentUtteranceChannelCount: UInt16 = 1
@@ -3443,6 +3584,7 @@ private final class MissionTranscriber {
         self.captureAudioForAnalysis = captureAudioForAnalysis
         updateHandler = onUpdate
         finalHandler = onFinal
+        lastSpeechActivityNanoseconds = 0
 
         let inputNode = audioEngine.inputNode
         let format = inputNode.outputFormat(forBus: 0)
@@ -3493,6 +3635,7 @@ private final class MissionTranscriber {
         playbackEchoReference = ""
         playbackEchoDeadline = .distantPast
         captureAudioForAnalysis = false
+        lastSpeechActivityNanoseconds = 0
         audioCaptureQueue.sync {
             currentUtterancePCM.removeAll(keepingCapacity: false)
         }
@@ -3505,6 +3648,7 @@ private final class MissionTranscriber {
         isSegmentDeliveryEnabled = false
         playbackEchoReference = ""
         playbackEchoDeadline = .distantPast
+        lastSpeechActivityNanoseconds = 0
         resetCurrentUtterance()
     }
 
@@ -3519,6 +3663,7 @@ private final class MissionTranscriber {
         resumeDeliveryTask?.cancel()
         resumeDeliveryTask = nil
         resetCurrentUtterance()
+        lastSpeechActivityNanoseconds = 0
 
         if delayNanoseconds == 0 {
             guard isRunning else { return }
@@ -3536,15 +3681,27 @@ private final class MissionTranscriber {
         }
     }
 
-    private func scheduleSilenceCommit(using transcript: String) {
+    private func scheduleSilenceCommit() {
         silenceCommitTask?.cancel()
 
         silenceCommitTask = Task { [weak self] in
             guard let self else { return }
-            try? await Task.sleep(nanoseconds: self.silenceCommitDelayNanoseconds)
-            guard !Task.isCancelled, self.isRunning else { return }
-            self.finishCurrentUtterance(withFallback: transcript)
-            self.restartRecognitionSession()
+
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: self.silenceCommitDelayNanoseconds)
+                guard !Task.isCancelled, self.isRunning else { return }
+
+                let now = DispatchTime.now().uptimeNanoseconds
+                let lastSpeechActivity = self.lastSpeechActivityNanoseconds
+                let silenceDuration = now > lastSpeechActivity ? now - lastSpeechActivity : self.silenceCommitDelayNanoseconds
+
+                guard silenceDuration >= self.silenceCommitDelayNanoseconds else { continue }
+
+                let fallback = self.lastTranscript.isEmpty ? self.lastRecognitionEmission : self.lastTranscript
+                self.finishCurrentUtterance(withFallback: fallback)
+                self.restartRecognitionSession()
+                return
+            }
         }
     }
 
@@ -3602,9 +3759,10 @@ private final class MissionTranscriber {
         if !transcript.isEmpty {
             didCaptureSpeech = true
             lastTranscript = transcript
+            noteSpeechActivity()
             updateHandler?(transcript)
-            if shouldRescheduleSilenceCommit {
-                scheduleSilenceCommit(using: transcript)
+            if shouldRescheduleSilenceCommit || silenceCommitTask == nil {
+                scheduleSilenceCommit()
             }
         }
 
@@ -3636,12 +3794,17 @@ private final class MissionTranscriber {
         lastTranscript = ""
         lastRecognitionEmission = ""
         didCaptureSpeech = false
+        lastSpeechActivityNanoseconds = 0
         audioCaptureQueue.sync {
             currentUtterancePCM.removeAll(keepingCapacity: false)
         }
     }
 
     private func captureAudioBufferIfNeeded(_ buffer: AVAudioPCMBuffer) {
+        if containsSpeechEnergy(in: buffer) {
+            noteSpeechActivity()
+        }
+
         guard captureAudioForAnalysis, isSegmentDeliveryEnabled, buffer.frameLength > 0 else { return }
 
         let frameCount = Int(buffer.frameLength)
@@ -3736,6 +3899,63 @@ private final class MissionTranscriber {
     private func configurePlaybackEchoFilter(using reference: String) {
         playbackEchoReference = reference
         playbackEchoDeadline = reference.isEmpty ? .distantPast : Date().addingTimeInterval(playbackEchoFilterDuration)
+    }
+
+    private func noteSpeechActivity() {
+        lastSpeechActivityNanoseconds = DispatchTime.now().uptimeNanoseconds
+    }
+
+    private func containsSpeechEnergy(in buffer: AVAudioPCMBuffer) -> Bool {
+        guard isSegmentDeliveryEnabled, buffer.frameLength > 0 else { return false }
+
+        let frameCount = Int(buffer.frameLength)
+
+        if let floatChannelData = buffer.floatChannelData {
+            let source = floatChannelData[0]
+            var totalMagnitude: Float = 0
+            var peak: Float = 0
+
+            for index in 0..<frameCount {
+                let sample = abs(source[index])
+                totalMagnitude += sample
+                peak = max(peak, sample)
+            }
+
+            let averageMagnitude = totalMagnitude / Float(frameCount)
+            return averageMagnitude >= voiceActivityFloor || peak >= voiceActivityPeakFloor
+        }
+
+        if let int16ChannelData = buffer.int16ChannelData {
+            let source = int16ChannelData[0]
+            var totalMagnitude: Float = 0
+            var peak: Float = 0
+
+            for index in 0..<frameCount {
+                let sample = Float(source[index].magnitude) / Float(Int16.max)
+                totalMagnitude += sample
+                peak = max(peak, sample)
+            }
+
+            let averageMagnitude = totalMagnitude / Float(frameCount)
+            return averageMagnitude >= voiceActivityFloor || peak >= voiceActivityPeakFloor
+        }
+
+        if let int32ChannelData = buffer.int32ChannelData {
+            let source = int32ChannelData[0]
+            var totalMagnitude: Float = 0
+            var peak: Float = 0
+
+            for index in 0..<frameCount {
+                let sample = Float(source[index].magnitude) / Float(Int32.max)
+                totalMagnitude += sample
+                peak = max(peak, sample)
+            }
+
+            let averageMagnitude = totalMagnitude / Float(frameCount)
+            return averageMagnitude >= voiceActivityFloor || peak >= voiceActivityPeakFloor
+        }
+
+        return false
     }
 
     private func shouldIgnoreTranscript(_ transcript: String) -> Bool {
@@ -4364,6 +4584,61 @@ private struct ResponsesRequest: Encodable {
 
     struct TextFormat: Encodable {
         let type: String
+        let name: String?
+        let strict: Bool?
+        let schema: JSONValue?
+    }
+}
+
+private enum JSONValue: Encodable {
+    case string(String)
+    case number(Double)
+    case bool(Bool)
+    case array([JSONValue])
+    case object([String: JSONValue])
+    case null
+
+    func encode(to encoder: Encoder) throws {
+        switch self {
+        case let .string(value):
+            var container = encoder.singleValueContainer()
+            try container.encode(value)
+        case let .number(value):
+            var container = encoder.singleValueContainer()
+            try container.encode(value)
+        case let .bool(value):
+            var container = encoder.singleValueContainer()
+            try container.encode(value)
+        case let .array(values):
+            var container = encoder.unkeyedContainer()
+            for value in values {
+                try container.encode(value)
+            }
+        case let .object(dictionary):
+            var container = encoder.container(keyedBy: DynamicCodingKey.self)
+            for key in dictionary.keys.sorted() {
+                guard let codingKey = DynamicCodingKey(stringValue: key) else { continue }
+                try container.encode(dictionary[key], forKey: codingKey)
+            }
+        case .null:
+            var container = encoder.singleValueContainer()
+            try container.encodeNil()
+        }
+    }
+}
+
+private struct DynamicCodingKey: CodingKey {
+    let stringValue: String
+    let intValue: Int?
+
+    init?(stringValue: String) {
+        self.stringValue = stringValue
+        self.intValue = nil
+    }
+
+    init?(intValue: Int) {
+        self.stringValue = String(intValue)
+        self.intValue = intValue
     }
 }
 
@@ -4389,10 +4664,15 @@ private struct ResponsesEnvelope: Decodable {
 
 private struct LoopResponse: Decodable {
     let summary: String
+    let operatorMessage: String
+    let internalMessage: String
     let progress: Double
     let objectiveMet: Bool
     let blocked: Bool
     let blocker: String?
+    let needsOperatorInput: Bool
+    let operatorQuestion: String?
+    let decisionTrace: DecisionTraceResponse
     let observe: LoopSectionResponse
     let orient: LoopSectionResponse
     let decide: LoopSectionResponse
@@ -4402,16 +4682,168 @@ private struct LoopResponse: Decodable {
 
     enum CodingKeys: String, CodingKey {
         case summary
+        case operatorMessage = "operator_message"
+        case internalMessage = "internal_message"
         case progress
         case objectiveMet = "objective_met"
         case blocked
         case blocker
+        case needsOperatorInput = "needs_operator_input"
+        case operatorQuestion = "operator_question"
+        case decisionTrace = "decision_trace"
         case observe
         case orient
         case decide
         case act
         case guide
         case actions
+    }
+
+    static let jsonSchema: JSONValue = {
+        let sectionSchema: JSONValue = .object([
+            "type": .string("object"),
+            "additionalProperties": .bool(false),
+            "properties": .object([
+                "headline": .object(["type": .string("string"), "minLength": .number(1)]),
+                "narrative": .object(["type": .string("string"), "minLength": .number(1)]),
+                "bullets": .object([
+                    "type": .string("array"),
+                    "items": .object(["type": .string("string")]),
+                    "minItems": .number(1),
+                    "maxItems": .number(4)
+                ]),
+                "confidence": .object([
+                    "type": .string("number"),
+                    "minimum": .number(0),
+                    "maximum": .number(1)
+                ])
+            ]),
+            "required": .array([
+                .string("headline"),
+                .string("narrative"),
+                .string("bullets"),
+                .string("confidence")
+            ])
+        ])
+
+        let actionSchema: JSONValue = .object([
+            "type": .string("object"),
+            "additionalProperties": .bool(false),
+            "properties": .object([
+                "title": .object(["type": .string("string"), "minLength": .number(1)]),
+                "tool": .object(["type": .string("string"), "minLength": .number(1)]),
+                "target": .object(["type": .string("string")]),
+                "rationale": .object(["type": .string("string"), "minLength": .number(1)]),
+                "status": .object([
+                    "type": .string("string"),
+                    "enum": .array([.string("queued"), .string("ready"), .string("blocked"), .string("done")])
+                ]),
+                "x": .object(["type": .array([.string("number"), .string("null")])]),
+                "y": .object(["type": .array([.string("number"), .string("null")])])
+            ]),
+            "required": .array([
+                .string("title"),
+                .string("tool"),
+                .string("target"),
+                .string("rationale"),
+                .string("status"),
+                .string("x"),
+                .string("y")
+            ])
+        ])
+
+        return .object([
+            "type": .string("object"),
+            "additionalProperties": .bool(false),
+            "properties": .object([
+                "summary": .object(["type": .string("string"), "minLength": .number(1)]),
+                "operator_message": .object(["type": .string("string"), "minLength": .number(1)]),
+                "internal_message": .object(["type": .string("string"), "minLength": .number(1)]),
+                "progress": .object([
+                    "type": .string("number"),
+                    "minimum": .number(0),
+                    "maximum": .number(1)
+                ]),
+                "objective_met": .object(["type": .string("boolean")]),
+                "blocked": .object(["type": .string("boolean")]),
+                "blocker": .object(["type": .array([.string("string"), .string("null")])]),
+                "needs_operator_input": .object(["type": .string("boolean")]),
+                "operator_question": .object(["type": .array([.string("string"), .string("null")])]),
+                "decision_trace": .object([
+                    "type": .string("object"),
+                    "additionalProperties": .bool(false),
+                    "properties": .object([
+                        "situation": .object(["type": .string("string"), "minLength": .number(1)]),
+                        "intent": .object(["type": .string("string"), "minLength": .number(1)]),
+                        "why_now": .object(["type": .string("string"), "minLength": .number(1)]),
+                        "risk": .object(["type": .string("string"), "minLength": .number(1)]),
+                        "success_signal": .object(["type": .string("string"), "minLength": .number(1)])
+                    ]),
+                    "required": .array([
+                        .string("situation"),
+                        .string("intent"),
+                        .string("why_now"),
+                        .string("risk"),
+                        .string("success_signal")
+                    ])
+                ]),
+                "observe": sectionSchema,
+                "orient": sectionSchema,
+                "decide": sectionSchema,
+                "act": sectionSchema,
+                "guide": sectionSchema,
+                "actions": .object([
+                    "type": .string("array"),
+                    "items": actionSchema,
+                    "minItems": .number(1),
+                    "maxItems": .number(5)
+                ])
+            ]),
+            "required": .array([
+                .string("summary"),
+                .string("operator_message"),
+                .string("internal_message"),
+                .string("progress"),
+                .string("objective_met"),
+                .string("blocked"),
+                .string("blocker"),
+                .string("needs_operator_input"),
+                .string("operator_question"),
+                .string("decision_trace"),
+                .string("observe"),
+                .string("orient"),
+                .string("decide"),
+                .string("act"),
+                .string("guide"),
+                .string("actions")
+            ])
+        ])
+    }()
+}
+
+private struct DecisionTraceResponse: Decodable {
+    let situation: String
+    let intent: String
+    let whyNow: String
+    let risk: String
+    let successSignal: String
+
+    enum CodingKeys: String, CodingKey {
+        case situation
+        case intent
+        case whyNow = "why_now"
+        case risk
+        case successSignal = "success_signal"
+    }
+
+    var note: String {
+        [
+            "Situation: \(situation)",
+            "Intent: \(intent)",
+            "Why now: \(whyNow)",
+            "Risk: \(risk)",
+            "Success signal: \(successSignal)"
+        ].joined(separator: "\n")
     }
 }
 
