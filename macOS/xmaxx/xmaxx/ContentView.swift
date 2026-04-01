@@ -24,6 +24,8 @@ struct ContentView: View {
                     VStack(spacing: 18) {
                         HeaderBar(store: store, isCompact: layout.isHeaderCompact) {
                             isSettingsPresented = true
+                        } onNewSession: {
+                            store.startNewSession()
                         }
 
                         if layout.prefersSingleColumn {
@@ -119,6 +121,7 @@ private struct HeaderBar: View {
     @ObservedObject var store: AppStore
     let isCompact: Bool
     let onOpenSettings: () -> Void
+    let onNewSession: () -> Void
 
     var body: some View {
         Group {
@@ -128,6 +131,7 @@ private struct HeaderBar: View {
 
                     HStack(spacing: 12) {
                         StatusPill(title: store.status.title, subtitle: store.statusMessage)
+                        newSessionButton
                         settingsButton
                     }
                 }
@@ -139,6 +143,7 @@ private struct HeaderBar: View {
 
                     HStack(spacing: 12) {
                         StatusPill(title: store.status.title, subtitle: store.statusMessage)
+                        newSessionButton
                         settingsButton
                     }
                 }
@@ -157,6 +162,25 @@ private struct HeaderBar: View {
                 .font(.system(size: 15, weight: .semibold, design: .rounded))
                 .foregroundStyle(Color.white.opacity(0.62))
         }
+    }
+
+    private var newSessionButton: some View {
+        Button(action: onNewSession) {
+            Text("New Session")
+                .font(.system(size: 13, weight: .black, design: .rounded))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(Color.white.opacity(0.08))
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(Color.white.opacity(0.10), lineWidth: 1)
+                }
+        }
+        .buttonStyle(.plain)
     }
 
     private var settingsButton: some View {
@@ -240,46 +264,7 @@ private struct ControlDeckPanel: View {
                     .foregroundStyle(Color.white.opacity(0.62))
                     .fixedSize(horizontal: false, vertical: true)
 
-                MetricStrip(store: store)
-
-                fieldBlock(title: "Decision Model") {
-                    DecisionModelSelector(store: store)
-                }
-
-                fieldBlock(title: "Automation") {
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack(spacing: 8) {
-                            PermissionCapsule(title: "Accessibility", isGranted: store.isAccessibilityGranted)
-                            PermissionCapsule(title: "Screen", isGranted: store.isScreenRecordingGranted)
-                        }
-
-                        Text(store.automationStatusMessage)
-                            .font(.system(size: 12, weight: .medium, design: .rounded))
-                            .foregroundStyle(Color.white.opacity(0.70))
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    .padding(14)
-                    .background(panelInputBackground)
-                }
-
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Text("Iteration Budget")
-                            .font(.system(size: 13, weight: .black, design: .rounded))
-                            .foregroundStyle(Color.white.opacity(0.56))
-
-                        Spacer()
-
-                        Text("\(store.maxIterations)")
-                            .font(.system(size: 13, weight: .bold, design: .rounded))
-                            .foregroundStyle(.white)
-                    }
-
-                    Stepper(value: $store.maxIterations, in: 1...12) {
-                        EmptyView()
-                    }
-                    .labelsHidden()
-                }
+                SessionSummaryCard(store: store)
 
                 fieldBlock(title: "Mission") {
                     VStack(alignment: .leading, spacing: 10) {
@@ -306,29 +291,59 @@ private struct ControlDeckPanel: View {
                             .font(.system(size: 15, weight: .medium, design: .rounded))
                             .foregroundStyle(.white)
                             .padding(12)
-                            .frame(minHeight: 150)
+                            .frame(minHeight: 132)
                             .background(panelInputBackground)
                     }
                 }
 
-                fieldBlock(title: "Environment") {
-                    TextEditor(text: $store.environmentText)
-                        .scrollContentBackground(.hidden)
-                        .font(.system(size: 14, weight: .medium, design: .rounded))
-                        .foregroundStyle(.white.opacity(0.88))
-                        .padding(12)
-                        .frame(minHeight: 220)
+                fieldBlock(title: "Planning Surface") {
+                    VStack(alignment: .leading, spacing: 14) {
+                        DecisionModelSelector(store: store)
+
+                        HStack(spacing: 12) {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("Iteration Budget")
+                                    .font(.system(size: 12, weight: .black, design: .rounded))
+                                    .foregroundStyle(Color.white.opacity(0.48))
+
+                                Text("Cap the loop at \(store.maxIterations) guided \(store.maxIterations == 1 ? "cycle" : "cycles").")
+                                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                                    .foregroundStyle(Color.white.opacity(0.62))
+                            }
+
+                            Spacer()
+
+                            Stepper(value: $store.maxIterations, in: 1...12) {
+                                EmptyView()
+                            }
+                            .labelsHidden()
+                        }
+                        .padding(14)
                         .background(panelInputBackground)
+                    }
                 }
 
-                fieldBlock(title: "Operator Feedback") {
-                    TextEditor(text: $store.operatorFeedback)
-                        .scrollContentBackground(.hidden)
-                        .font(.system(size: 14, weight: .medium, design: .rounded))
-                        .foregroundStyle(Color.white.opacity(0.88))
-                        .padding(12)
-                        .frame(minHeight: 110)
-                        .background(panelInputBackground)
+                fieldBlock(title: "Loop Context") {
+                    VStack(alignment: .leading, spacing: 12) {
+                        ContextEditor(title: "Environment", text: $store.environmentText, minHeight: 150)
+                        ContextEditor(title: "Operator Feedback", text: $store.operatorFeedback, minHeight: 96)
+                    }
+                }
+
+                fieldBlock(title: "Automation") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(spacing: 8) {
+                            PermissionCapsule(title: "Accessibility", isGranted: store.isAccessibilityGranted)
+                            PermissionCapsule(title: "Screen", isGranted: store.isScreenRecordingGranted)
+                        }
+
+                        Text(store.automationStatusMessage)
+                            .font(.system(size: 12, weight: .medium, design: .rounded))
+                            .foregroundStyle(Color.white.opacity(0.70))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(14)
+                    .background(panelInputBackground)
                 }
 
                 VStack(alignment: .leading, spacing: 10) {
@@ -658,8 +673,8 @@ private struct ActivityRail: View {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
                         VStack(alignment: .leading, spacing: 8) {
-                            sectionLabel("Voice Channels")
-                            Text("Internal vs external")
+                            sectionLabel("Conversation")
+                            Text("Operator dialog")
                                 .font(.system(size: 28, weight: .bold, design: .rounded))
                                 .foregroundStyle(.white)
                         }
@@ -677,67 +692,46 @@ private struct ActivityRail: View {
                             )
                     }
 
-                    VoiceChannelCard(
-                        title: "Voice Flow",
-                        systemImage: "waveform.badge.mic",
-                        bodyText: store.voiceFlowDetail,
-                        accent: voiceFlowAccent
-                    ) {
-                        VStack(alignment: .leading, spacing: 10) {
-                            HStack(spacing: 10) {
-                                Text(store.voiceFlowState.title)
-                                    .font(.system(size: 11, weight: .black, design: .rounded))
-                                    .foregroundStyle(voiceFlowAccent)
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 6)
-                                    .background(
-                                        Capsule(style: .continuous)
-                                            .fill(voiceFlowAccent.opacity(0.14))
-                                    )
-
-                                Text(store.voiceFlowTitle)
-                                    .font(.system(size: 13, weight: .bold, design: .rounded))
-                                    .foregroundStyle(.white)
-                            }
-
-                            if !store.voiceFlowTranscript.isEmpty {
-                                Text(store.voiceFlowTranscript)
-                                    .font(.system(size: 12, weight: .medium, design: .monospaced))
-                                    .foregroundStyle(Color.white.opacity(0.84))
-                                    .padding(12)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                            .fill(Color.black.opacity(0.22))
-                                    )
-                                    .overlay {
-                                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                            .stroke(Color.white.opacity(0.08), lineWidth: 1)
-                                    }
-                            }
+                    HStack(spacing: 8) {
+                        railBadge(title: "Session \(store.sessionNumber)", accent: Color.white.opacity(0.34))
+                        railBadge(title: store.voiceFlowState.title, accent: voiceFlowAccent)
+                        if store.awaitingActionConfirmation {
+                            railBadge(title: "Approval", accent: Color(red: 0.98, green: 0.74, blue: 0.28))
                         }
                     }
 
-                    VoiceChannelCard(
-                        title: "Out Loud",
-                        systemImage: "speaker.wave.2.fill",
-                        bodyText: store.externalDialogText,
-                        accent: Color(red: 0.55, green: 0.84, blue: 0.65)
-                    )
+                    Text(store.voiceFlowTitle)
+                        .font(.system(size: 15, weight: .bold, design: .rounded))
+                        .foregroundStyle(.white)
 
-                    VoiceChannelCard(
-                        title: "Internal",
-                        systemImage: "brain.head.profile",
-                        bodyText: store.internalDialogText,
-                        accent: Color(red: 0.98, green: 0.74, blue: 0.28)
-                    )
+                    Text(store.voiceFlowDetail)
+                        .font(.system(size: 13, weight: .medium, design: .rounded))
+                        .foregroundStyle(Color.white.opacity(0.70))
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    if !store.voiceAnalysisSummary.isEmpty {
+                        Text(store.voiceAnalysisSummary)
+                            .font(.system(size: 12, weight: .medium, design: .rounded))
+                            .foregroundStyle(Color(red: 0.56, green: 0.82, blue: 0.77))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    ScrollView {
+                        LazyVStack(spacing: 12) {
+                            ForEach(store.conversationEntries) { message in
+                                ConversationBubble(message: message, profileName: store.profileName)
+                            }
+                        }
+                    }
+                    .frame(minHeight: 300, maxHeight: 420)
+                    .scrollIndicators(.visible)
                 }
             }
 
             PanelSurface {
                 VStack(alignment: .leading, spacing: 16) {
                     sectionLabel("Recent Cycles")
-                    Text("History")
+                    Text("Cycle History")
                         .font(.system(size: 30, weight: .bold, design: .rounded))
                         .foregroundStyle(.white)
 
@@ -760,7 +754,7 @@ private struct ActivityRail: View {
             PanelSurface {
                 VStack(alignment: .leading, spacing: 16) {
                     sectionLabel("Inspector")
-                    Text("Selected cycle")
+                    Text("Cycle Detail")
                         .font(.system(size: 28, weight: .bold, design: .rounded))
                         .foregroundStyle(.white)
 
@@ -804,6 +798,22 @@ private struct ActivityRail: View {
                 .foregroundStyle(Color.white.opacity(0.84))
                 .fixedSize(horizontal: false, vertical: true)
         }
+    }
+
+    private func railBadge(title: String, accent: Color) -> some View {
+        Text(title)
+            .font(.system(size: 11, weight: .black, design: .rounded))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(accent.opacity(0.18))
+            )
+            .overlay {
+                Capsule(style: .continuous)
+                    .stroke(accent.opacity(0.34), lineWidth: 1)
+            }
     }
 
     private var voiceFlowAccent: Color {
@@ -1097,6 +1107,250 @@ private struct CycleCard: View {
             }
         }
         .buttonStyle(.plain)
+    }
+}
+
+private struct SessionSummaryCard: View {
+    @ObservedObject var store: AppStore
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(store.sessionHeadline)
+                        .font(.system(size: 19, weight: .bold, design: .rounded))
+                        .foregroundStyle(.white)
+
+                    Text(store.sessionDetail)
+                        .font(.system(size: 13, weight: .medium, design: .rounded))
+                        .foregroundStyle(Color.white.opacity(0.68))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 0)
+            }
+
+            HStack(spacing: 10) {
+                summaryStat(title: "Cycles", value: "\(store.cycles.count)")
+                summaryStat(title: "Dialog", value: "\(store.dialogueCount)")
+                summaryStat(title: "Started", value: sessionStartedLabel)
+            }
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(Color.white.opacity(0.05))
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+        }
+    }
+
+    private var sessionStartedLabel: String {
+        store.sessionStartedAt.formatted(date: .omitted, time: .shortened)
+    }
+
+    private func summaryStat(title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.system(size: 11, weight: .black, design: .rounded))
+                .foregroundStyle(Color.white.opacity(0.44))
+
+            Text(value)
+                .font(.system(size: 14, weight: .bold, design: .rounded))
+                .foregroundStyle(.white)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color.black.opacity(0.16))
+        )
+    }
+}
+
+private struct ContextEditor: View {
+    let title: String
+    @Binding var text: String
+    let minHeight: CGFloat
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.system(size: 12, weight: .black, design: .rounded))
+                .foregroundStyle(Color.white.opacity(0.48))
+
+            TextEditor(text: $text)
+                .scrollContentBackground(.hidden)
+                .font(.system(size: 14, weight: .medium, design: .rounded))
+                .foregroundStyle(Color.white.opacity(0.88))
+                .padding(12)
+                .frame(minHeight: minHeight)
+                .background(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .fill(Color.black.opacity(0.18))
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                }
+        }
+    }
+}
+
+private struct ConversationBubble: View {
+    let message: ConversationMessage
+    let profileName: String
+
+    var body: some View {
+        Group {
+            switch message.speaker {
+            case .system:
+                systemBubble
+            case .computer:
+                HStack(alignment: .top) {
+                    bubble(alignment: .leading)
+                    Spacer(minLength: 36)
+                }
+            case .user:
+                HStack(alignment: .top) {
+                    Spacer(minLength: 36)
+                    bubble(alignment: .trailing)
+                }
+            }
+        }
+    }
+
+    private var systemBubble: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: "sparkles.rectangle.stack")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(Color.white.opacity(0.72))
+
+                Text(message.speaker.title)
+                    .font(.system(size: 11, weight: .black, design: .rounded))
+                    .foregroundStyle(Color.white.opacity(0.56))
+
+                Spacer()
+
+                stateBadge
+            }
+
+            Text(message.text)
+                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .foregroundStyle(.white)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if let detail = message.detail, !detail.isEmpty {
+                Text(detail)
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundStyle(Color.white.opacity(0.62))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(Color.white.opacity(0.05))
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+        }
+    }
+
+    private func bubble(alignment: HorizontalAlignment) -> some View {
+        VStack(alignment: alignment, spacing: 8) {
+            HStack(spacing: 8) {
+                if message.speaker == .computer {
+                    Text(displayName)
+                        .font(.system(size: 11, weight: .black, design: .rounded))
+                        .foregroundStyle(Color.white.opacity(0.58))
+
+                    stateBadge
+                } else {
+                    stateBadge
+
+                    Text(displayName)
+                        .font(.system(size: 11, weight: .black, design: .rounded))
+                        .foregroundStyle(Color.white.opacity(0.58))
+                }
+            }
+
+            Text(message.text)
+                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                .foregroundStyle(.white)
+                .multilineTextAlignment(message.speaker == .user ? .trailing : .leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: message.speaker == .user ? .trailing : .leading)
+
+            if let detail = message.detail, !detail.isEmpty {
+                Text(detail)
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundStyle(Color.white.opacity(0.66))
+                    .multilineTextAlignment(message.speaker == .user ? .trailing : .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: message.speaker == .user ? .trailing : .leading)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: 280, alignment: message.speaker == .user ? .trailing : .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(bubbleAccent.opacity(0.18))
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(bubbleAccent.opacity(0.36), lineWidth: 1)
+        }
+    }
+
+    private var displayName: String {
+        switch message.speaker {
+        case .user:
+            return profileName.isEmpty ? "You" : profileName
+        case .computer:
+            return "xmaxx"
+        case .system:
+            return "Session"
+        }
+    }
+
+    private var bubbleAccent: Color {
+        switch message.speaker {
+        case .user:
+            switch message.state {
+            case .live:
+                return Color(red: 0.35, green: 0.73, blue: 0.96)
+            case .captured:
+                return Color(red: 0.98, green: 0.74, blue: 0.28)
+            case .processing:
+                return Color(red: 0.57, green: 0.89, blue: 0.74)
+            case .delivered, .noted:
+                return Color(red: 0.35, green: 0.73, blue: 0.96)
+            }
+        case .computer:
+            return Color(red: 0.99, green: 0.48, blue: 0.36)
+        case .system:
+            return Color.white.opacity(0.28)
+        }
+    }
+
+    private var stateBadge: some View {
+        Text(message.state.title)
+            .font(.system(size: 10, weight: .black, design: .rounded))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(bubbleAccent.opacity(0.24))
+            )
     }
 }
 

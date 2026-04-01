@@ -366,6 +366,71 @@ enum VoiceFlowState: String, Hashable {
     }
 }
 
+enum ConversationSpeaker: String, Hashable {
+    case user
+    case computer
+    case system
+
+    var title: String {
+        switch self {
+        case .user:
+            return "You"
+        case .computer:
+            return "xmaxx"
+        case .system:
+            return "Session"
+        }
+    }
+}
+
+enum ConversationMessageState: String, Hashable {
+    case live
+    case captured
+    case processing
+    case delivered
+    case noted
+
+    var title: String {
+        switch self {
+        case .live:
+            return "Listening"
+        case .captured:
+            return "Captured"
+        case .processing:
+            return "In Loop"
+        case .delivered:
+            return "Sent"
+        case .noted:
+            return "Session"
+        }
+    }
+}
+
+struct ConversationMessage: Identifiable, Hashable {
+    let id: UUID
+    let speaker: ConversationSpeaker
+    let createdAt: Date
+    var text: String
+    var detail: String?
+    var state: ConversationMessageState
+
+    init(
+        id: UUID = UUID(),
+        speaker: ConversationSpeaker,
+        createdAt: Date = .now,
+        text: String,
+        detail: String? = nil,
+        state: ConversationMessageState
+    ) {
+        self.id = id
+        self.speaker = speaker
+        self.createdAt = createdAt
+        self.text = text
+        self.detail = detail
+        self.state = state
+    }
+}
+
 struct NavigationSection: Identifiable, Hashable {
     let phase: NavigationPhase
     var stageTitle: String
@@ -454,6 +519,9 @@ final class AppStore: ObservableObject {
     @Published var voiceAnalysisSummary: String
     @Published var externalDialogText: String
     @Published var internalDialogText: String
+    @Published private(set) var sessionStartedAt: Date
+    @Published private(set) var sessionNumber: Int
+    @Published private(set) var conversationEntries: [ConversationMessage]
     @Published private(set) var awaitingActionConfirmation: Bool
     @Published private(set) var isAccessibilityGranted: Bool
     @Published private(set) var isScreenRecordingGranted: Bool
@@ -496,6 +564,7 @@ final class AppStore: ObservableObject {
     private var liveVoiceLoopContext = ""
     private var missionDraftBaseText: String?
     private var operatorFeedbackDraftBaseText: String?
+    private var activeVoiceDraftMessageID: ConversationMessage.ID?
     private var actionApprovalContinuation: CheckedContinuation<ActionApprovalDecision, Never>?
     private let speechCoordinator = SpeechCoordinator()
     private let missionTranscriber = MissionTranscriber()
@@ -503,6 +572,7 @@ final class AppStore: ObservableObject {
     init(userDefaults: UserDefaults = .standard) {
         self.userDefaults = userDefaults
 
+        let legacyDefaultMissionText = "Build a desktop computer-use copilot around a guided loop."
         let legacyDefaultEnvironmentText = """
         Current app shell is a macOS dashboard. We have profile and API key settings, but no live screen capture, automation executor, or tool bridge yet.
         """
@@ -513,7 +583,10 @@ final class AppStore: ObservableObject {
         Current app shell is a macOS dashboard. ChatGPT planning is active, a limited automation executor is available for coordinate-based mouse_move, mouse_click, and mouse_right_click when Accessibility permission is granted, and screenshot-based coordinate lookup is available through find_screen_text when Screen Recording permission is granted.
         """
         let storedProfileName = userDefaults.string(forKey: profileNameKey) ?? ""
-        let storedMissionText = userDefaults.string(forKey: missionTextKey) ?? "Build a desktop computer-use copilot around a guided loop."
+        let persistedMissionText = userDefaults.string(forKey: missionTextKey) ?? ""
+        let storedMissionText = persistedMissionText.trimmingCharacters(in: .whitespacesAndNewlines) == legacyDefaultMissionText
+            ? ""
+            : persistedMissionText
         let persistedEnvironmentText = userDefaults.string(forKey: environmentTextKey)
         let storedEnvironmentText: String
         if let persistedEnvironmentText {
@@ -575,6 +648,9 @@ final class AppStore: ObservableObject {
         voiceAnalysisSummary = ""
         externalDialogText = "Ready to speak to the operator."
         internalDialogText = "Internal guided-loop narration will appear here."
+        sessionStartedAt = .now
+        sessionNumber = 1
+        conversationEntries = []
         awaitingActionConfirmation = false
         isAccessibilityGranted = SystemPermissionPrompter.isAccessibilityGranted()
         isScreenRecordingGranted = SystemPermissionPrompter.isScreenRecordingGranted()
@@ -607,11 +683,53 @@ final class AppStore: ObservableObject {
         ]
         statusMessage = "Ready to plan with \(starterDecisionProfile.selectedModelLine)."
         selectedCycleID = cycles.first?.id
+        conversationEntries = Self.bootstrapConversationEntries(
+            mission: storedMissionText,
+            operatorFeedback: storedOperatorFeedback
+        )
         refreshAutomationStatusMessage()
     }
 
     var selectedCycle: NavigationCycle? {
         cycles.first(where: { $0.id == selectedCycleID })
+    }
+
+    var sessionHeadline: String {
+        if awaitingActionConfirmation {
+            return "Awaiting approval"
+        }
+
+        if isGuidedLoopRunning {
+            return "Session live"
+        }
+
+        if missionText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+            operatorFeedback.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+            cycles.count <= 1 {
+            return "New session ready"
+        }
+
+        return "Draft loaded"
+    }
+
+    var sessionDetail: String {
+        if awaitingActionConfirmation {
+            return "The latest plan is waiting for confirmation. Keep talking to revise it or approve the queued actions."
+        }
+
+        if isGuidedLoopRunning {
+            return "The loop is running live. New pauses from your voice are folded back into the current plan."
+        }
+
+        if missionText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "Speak or type a fresh mission, or press New Session any time to clear the current workspace."
+        }
+
+        return "Startup restored the current mission draft. You can continue it immediately or clear into a new session."
+    }
+
+    var dialogueCount: Int {
+        conversationEntries.filter { $0.speaker != .system }.count
     }
 
     var canRunLoop: Bool {
@@ -693,6 +811,79 @@ final class AppStore: ObservableObject {
         return ActionGraphSnapshot(
             nodes: [loopNode] + phaseNodes + actionNodes,
             edges: edges
+        )
+    }
+
+    func startNewSession() {
+        resolvePendingActionApproval(with: .revise)
+        loopTask?.cancel()
+        loopTask = nil
+        listeningRestartTask?.cancel()
+        listeningRestartTask = nil
+        speakingTask?.cancel()
+        speakingTask = nil
+
+        missionTranscriber.stop()
+        voiceLoopEnabled = false
+        isRecordingMission = false
+        isAgentSpeaking = false
+        liveVoiceLoopContext = ""
+        clearMissionDraftPreview()
+        clearOperatorFeedbackDraftPreview()
+        discardLiveVoiceDraftIfNeeded()
+
+        missionText = ""
+        operatorFeedback = ""
+        voiceAnalysisSummary = ""
+        externalDialogText = "Ready for a new session."
+        internalDialogText = "Session reset. Awaiting a fresh mission."
+        awaitingActionConfirmation = false
+        currentIteration = 0
+        objectiveProgress = 0.18
+        sessionStartedAt = .now
+        sessionNumber += 1
+
+        let profile = activeDecisionProfile
+        let starterSections = Self.placeholderSections(for: profile)
+        let starterActions = Self.placeholderActions(for: profile)
+        sections = starterSections
+        actionQueue = starterActions
+
+        let starterCycle = NavigationCycle(
+            iteration: 0,
+            createdAt: .now,
+            mission: "",
+            environment: environmentText,
+            summary: "New session ready. Speak or type a mission to start the next loop.",
+            model: "Planning Shell",
+            progress: objectiveProgress,
+            objectiveMet: false,
+            isBlocked: false,
+            blocker: nil,
+            sections: starterSections,
+            actions: starterActions
+        )
+
+        cycles = [starterCycle]
+        selectedCycleID = starterCycle.id
+        conversationEntries = Self.bootstrapConversationEntries(mission: "", operatorFeedback: "")
+        persistWorkspaceDraft()
+
+        if chatGPTAPIKey.isEmpty {
+            status = .awaitingAPIKey
+            statusMessage = "Add your ChatGPT API key in settings before starting the next session."
+        } else {
+            status = .idle
+            statusMessage = "New session ready. Speak or type the mission when you want to begin."
+        }
+
+        recordingStatusMessage = "New session ready. Start the voice loop or type a new mission."
+        updateVoiceFlow(
+            state: .idle,
+            title: "New session",
+            detail: "The previous dialog and cycle history were cleared. The next spoken pause will start a fresh session.",
+            transcript: nil,
+            clearTranscript: true
         )
     }
 
@@ -1172,6 +1363,7 @@ final class AppStore: ObservableObject {
         liveVoiceLoopContext = ""
         clearMissionDraftPreview()
         clearOperatorFeedbackDraftPreview()
+        discardLiveVoiceDraftIfNeeded()
         let trimmedMission = missionText.trimmingCharacters(in: .whitespacesAndNewlines)
         recordingStatusMessage = trimmedMission.isEmpty
             ? "Ready. Start the voice loop to capture the mission."
@@ -1207,6 +1399,7 @@ final class AppStore: ObservableObject {
         let trimmedTranscript = capture.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedTranscript.isEmpty else {
             clearMissionDraftPreview()
+            discardLiveVoiceDraftIfNeeded()
             capture.deleteTemporaryAudioFileIfNeeded()
             return
         }
@@ -1215,6 +1408,11 @@ final class AppStore: ObservableObject {
         clearMissionDraftPreview()
         pauseMissionRecordingForProcessing()
         missionText = appendMissionEntry(trimmedTranscript, to: baseMissionText)
+        finalizeVoiceDraft(
+            transcript: trimmedTranscript,
+            detail: "Captured as mission input and now being incorporated into the loop.",
+            state: .processing
+        )
         recordingStatusMessage = "Mission captured. Running x-maxx while voice analysis continues."
         updateVoiceFlow(
             state: .processing,
@@ -1234,6 +1432,7 @@ final class AppStore: ObservableObject {
         let trimmedTranscript = capture.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedTranscript.isEmpty else {
             clearOperatorFeedbackDraftPreview()
+            discardLiveVoiceDraftIfNeeded()
             capture.deleteTemporaryAudioFileIfNeeded()
             return
         }
@@ -1244,6 +1443,11 @@ final class AppStore: ObservableObject {
 
         if normalized.contains("stop loop") || normalized.contains("cancel loop") || normalized.contains("halt loop") {
             recordingStatusMessage = "Voice command received. Stopping the loop."
+            finalizeVoiceDraft(
+                transcript: trimmedTranscript,
+                detail: "Captured as a stop command.",
+                state: .captured
+            )
             updateVoiceFlow(
                 state: .captured,
                 title: "Stop command captured",
@@ -1257,6 +1461,11 @@ final class AppStore: ObservableObject {
 
         if awaitingActionConfirmation && isActionConfirmationCommand(normalized) {
             recordingStatusMessage = "Voice confirmation received. Executing approved actions."
+            finalizeVoiceDraft(
+                transcript: trimmedTranscript,
+                detail: "Captured as action approval. Execution is starting now.",
+                state: .processing
+            )
             updateVoiceFlow(
                 state: .captured,
                 title: "Confirmation captured",
@@ -1275,6 +1484,11 @@ final class AppStore: ObservableObject {
 
         if awaitingActionConfirmation {
             statusMessage = "New steering received. Replanning before any action executes."
+            finalizeVoiceDraft(
+                transcript: trimmedTranscript,
+                detail: "Captured as steering. The waiting plan is being revised before anything executes.",
+                state: .processing
+            )
             updateVoiceFlow(
                 state: .processing,
                 title: "Steering captured",
@@ -1286,6 +1500,11 @@ final class AppStore: ObservableObject {
         }
 
         if loopTask != nil {
+            finalizeVoiceDraft(
+                transcript: trimmedTranscript,
+                detail: "Captured as steering and now being folded into the live loop.",
+                state: .processing
+            )
             updateVoiceFlow(
                 state: .processing,
                 title: "Steering captured",
@@ -1294,6 +1513,11 @@ final class AppStore: ObservableObject {
             )
             restartLoopPlanningWithLatestContext()
         } else {
+            finalizeVoiceDraft(
+                transcript: trimmedTranscript,
+                detail: "Captured as steering and queued for the next cycle.",
+                state: .captured
+            )
             updateVoiceFlow(
                 state: .captured,
                 title: "Steering captured",
@@ -1356,6 +1580,10 @@ final class AppStore: ObservableObject {
         }
 
         missionText = appendMissionEntry(trimmedTranscript, to: missionDraftBaseText ?? "")
+        updateLiveVoiceDraft(
+            transcript: trimmedTranscript,
+            detail: "Listening now. If you pause here, this will become mission input."
+        )
         updateVoiceFlow(
             state: .listening,
             title: "Hearing mission text",
@@ -1373,6 +1601,10 @@ final class AppStore: ObservableObject {
         }
 
         operatorFeedback = appendOperatorFeedbackEntry(trimmedTranscript, to: operatorFeedbackDraftBaseText ?? "")
+        updateLiveVoiceDraft(
+            transcript: trimmedTranscript,
+            detail: "Listening now. If you pause here, this will be appended as fresh steering."
+        )
         updateVoiceFlow(
             state: .listening,
             title: "Hearing steering",
@@ -1544,8 +1776,11 @@ final class AppStore: ObservableObject {
                 awaitingActionConfirmation = true
                 status = .ready
                 statusMessage = "Plan ready. Say 'confirm action' to execute or keep talking to revise."
-                externalDialogText = "Plan ready. Say confirm action to execute, or keep talking to revise."
-                internalDialogText = "Waiting for action confirmation on cycle \(iteration). Fresh operator speech will revise the plan before any action executes."
+                recordComputerDialogue(
+                    external: "Plan ready. Say confirm action to execute, or keep talking to revise.",
+                    internal: "Waiting for action confirmation on cycle \(iteration). Fresh operator speech will revise the plan before any action executes.",
+                    note: "Waiting for approval before any executable action runs."
+                )
 
                 switch await waitForPendingActionApproval() {
                 case .revise:
@@ -1665,8 +1900,7 @@ final class AppStore: ObservableObject {
     }
 
     private func deliverDialogue(external: String, internal internalText: String) {
-        externalDialogText = external.trimmingCharacters(in: .whitespacesAndNewlines)
-        internalDialogText = internalText.trimmingCharacters(in: .whitespacesAndNewlines)
+        recordComputerDialogue(external: external, internal: internalText)
 
         guard audioResponsesEnabled else { return }
 
@@ -1756,6 +1990,116 @@ final class AppStore: ObservableObject {
             voiceFlowTranscript = ""
         } else if let transcript {
             voiceFlowTranscript = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+    }
+
+    private func updateLiveVoiceDraft(transcript: String, detail: String) {
+        let trimmedTranscript = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedDetail = detail.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTranscript.isEmpty else { return }
+
+        if
+            let activeVoiceDraftMessageID,
+            let index = conversationEntries.firstIndex(where: { $0.id == activeVoiceDraftMessageID })
+        {
+            conversationEntries[index].text = trimmedTranscript
+            conversationEntries[index].detail = trimmedDetail
+            conversationEntries[index].state = .live
+            return
+        }
+
+        let message = ConversationMessage(
+            speaker: .user,
+            text: trimmedTranscript,
+            detail: trimmedDetail,
+            state: .live
+        )
+        appendConversationEntry(message)
+        activeVoiceDraftMessageID = message.id
+    }
+
+    private func finalizeVoiceDraft(
+        transcript: String,
+        detail: String,
+        state: ConversationMessageState
+    ) {
+        let trimmedTranscript = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedDetail = detail.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTranscript.isEmpty else {
+            discardLiveVoiceDraftIfNeeded()
+            return
+        }
+
+        if
+            let activeVoiceDraftMessageID,
+            let index = conversationEntries.firstIndex(where: { $0.id == activeVoiceDraftMessageID })
+        {
+            conversationEntries[index].text = trimmedTranscript
+            conversationEntries[index].detail = trimmedDetail
+            conversationEntries[index].state = state
+            self.activeVoiceDraftMessageID = nil
+            return
+        }
+
+        appendConversationEntry(
+            ConversationMessage(
+                speaker: .user,
+                text: trimmedTranscript,
+                detail: trimmedDetail,
+                state: state
+            )
+        )
+        activeVoiceDraftMessageID = nil
+    }
+
+    private func discardLiveVoiceDraftIfNeeded() {
+        guard let activeVoiceDraftMessageID else { return }
+        defer { self.activeVoiceDraftMessageID = nil }
+
+        guard let index = conversationEntries.firstIndex(where: { $0.id == activeVoiceDraftMessageID }) else {
+            return
+        }
+
+        if conversationEntries[index].state == .live {
+            conversationEntries.remove(at: index)
+        }
+    }
+
+    private func recordComputerDialogue(
+        external: String,
+        internal internalText: String,
+        note: String? = nil
+    ) {
+        externalDialogText = external.trimmingCharacters(in: .whitespacesAndNewlines)
+        internalDialogText = internalText.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let visibleText = externalDialogText.isEmpty ? internalDialogText : externalDialogText
+        guard !visibleText.isEmpty else { return }
+
+        let resolvedDetail: String?
+        if let note {
+            let trimmedNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
+            resolvedDetail = trimmedNote.isEmpty ? nil : trimmedNote
+        } else if !internalDialogText.isEmpty, internalDialogText != visibleText {
+            resolvedDetail = internalDialogText
+        } else {
+            resolvedDetail = nil
+        }
+
+        appendConversationEntry(
+            ConversationMessage(
+                speaker: .computer,
+                text: visibleText,
+                detail: resolvedDetail,
+                state: .delivered
+            )
+        )
+    }
+
+    private func appendConversationEntry(_ message: ConversationMessage) {
+        conversationEntries.append(message)
+        if conversationEntries.count > 48 {
+            conversationEntries = Array(conversationEntries.suffix(48))
         }
     }
 
@@ -1893,6 +2237,30 @@ private extension NavigationCycle {
 }
 
 extension AppStore {
+    static func bootstrapConversationEntries(
+        mission: String,
+        operatorFeedback: String
+    ) -> [ConversationMessage] {
+        let hasDraft = !mission.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+            !operatorFeedback.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+
+        let text = hasDraft
+            ? "Draft restored at startup. Continue it immediately, or press New Session to clear it."
+            : "New session ready. Speak or type the mission to begin."
+        let detail = hasDraft
+            ? "The app recognized an existing mission or steering draft when it launched."
+            : "No prior dialog is active yet."
+
+        return [
+            ConversationMessage(
+                speaker: .system,
+                text: text,
+                detail: detail,
+                state: .noted
+            )
+        ]
+    }
+
     static func placeholderSections(for profile: DecisionProfile) -> [NavigationSection] {
         profile.stages.map { stage in
             let content: (headline: String, narrative: String, bullets: [String], confidence: Double)
