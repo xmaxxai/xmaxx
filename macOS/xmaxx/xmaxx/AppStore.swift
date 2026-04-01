@@ -316,9 +316,67 @@ enum LoopStatus: Hashable {
     }
 }
 
-private enum ActionApprovalDecision {
-    case confirm
+private enum OperatorPromptDecision {
+    case proceed
     case revise
+}
+
+enum OperatorPromptKind: String, Hashable {
+    case startupAssessment
+    case actionApproval
+    case checkpoint
+
+    var blocksLoop: Bool {
+        switch self {
+        case .startupAssessment:
+            return false
+        case .actionApproval, .checkpoint:
+            return true
+        }
+    }
+}
+
+struct OperatorPrompt: Identifiable, Hashable {
+    let id: UUID
+    let kind: OperatorPromptKind
+    let title: String
+    let question: String
+    let detail: String
+    let proceedLabel: String
+    let reviseLabel: String
+    let responsePlaceholder: String
+    let requiresResponse: Bool
+
+    init(
+        id: UUID = UUID(),
+        kind: OperatorPromptKind,
+        title: String,
+        question: String,
+        detail: String,
+        proceedLabel: String,
+        reviseLabel: String,
+        responsePlaceholder: String = "",
+        requiresResponse: Bool = false
+    ) {
+        self.id = id
+        self.kind = kind
+        self.title = title
+        self.question = question
+        self.detail = detail
+        self.proceedLabel = proceedLabel
+        self.reviseLabel = reviseLabel
+        self.responsePlaceholder = responsePlaceholder
+        self.requiresResponse = requiresResponse
+    }
+
+    var acceptsResponse: Bool {
+        requiresResponse || !responsePlaceholder.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+}
+
+private struct OperatorPromptResult {
+    let decision: OperatorPromptDecision
+    let response: String
 }
 
 enum AudioDialogueMode: String, CaseIterable, Hashable, Identifiable {
@@ -497,6 +555,24 @@ struct ActionGraphSnapshot: Hashable {
     let edges: [ActionGraphEdge]
 }
 
+private struct RecoverySnapshot: Codable {
+    let mission: String
+    let operatorFeedback: String
+    let cycleCount: Int
+    let lastCycleSummary: String
+    let lastCycleProgress: Double
+    let lastCycleTimestamp: Date
+    let lastStatusTitle: String
+    let voiceLoopEnabled: Bool
+
+    var hasRecoverableState: Bool {
+        !mission.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+        !operatorFeedback.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+        cycleCount > 1 ||
+        voiceLoopEnabled
+    }
+}
+
 @MainActor
 final class AppStore: ObservableObject {
     @Published var profileName: String
@@ -519,6 +595,9 @@ final class AppStore: ObservableObject {
     @Published var voiceAnalysisSummary: String
     @Published var externalDialogText: String
     @Published var internalDialogText: String
+    @Published private(set) var pendingOperatorPrompt: OperatorPrompt?
+    @Published var pendingOperatorResponseDraft: String
+    @Published private(set) var awaitingOperatorInput: Bool
     @Published private(set) var sessionStartedAt: Date
     @Published private(set) var sessionNumber: Int
     @Published private(set) var conversationEntries: [ConversationMessage]
@@ -556,6 +635,7 @@ final class AppStore: ObservableObject {
     private let operatorFeedbackKey = "operatorFeedback"
     private let maxIterationsKey = "maxIterations"
     private let voiceLoopEnabledKey = "voiceLoopEnabled"
+    private let recoverySnapshotKey = "recoverySnapshot"
     private var loopTask: Task<Void, Never>?
     private var listeningRestartTask: Task<Void, Never>?
     private var speakingTask: Task<Void, Never>?
@@ -565,7 +645,8 @@ final class AppStore: ObservableObject {
     private var missionDraftBaseText: String?
     private var operatorFeedbackDraftBaseText: String?
     private var activeVoiceDraftMessageID: ConversationMessage.ID?
-    private var actionApprovalContinuation: CheckedContinuation<ActionApprovalDecision, Never>?
+    private var startupRecoverySnapshot: RecoverySnapshot?
+    private var operatorPromptContinuation: CheckedContinuation<OperatorPromptResult, Never>?
     private let speechCoordinator = SpeechCoordinator()
     private let missionTranscriber = MissionTranscriber()
 
@@ -587,6 +668,10 @@ final class AppStore: ObservableObject {
         let storedMissionText = persistedMissionText.trimmingCharacters(in: .whitespacesAndNewlines) == legacyDefaultMissionText
             ? ""
             : persistedMissionText
+        let storedRecoverySnapshot = Self.loadRecoverySnapshot(
+            from: userDefaults,
+            key: recoverySnapshotKey
+        )
         let persistedEnvironmentText = userDefaults.string(forKey: environmentTextKey)
         let storedEnvironmentText: String
         if let persistedEnvironmentText {
@@ -648,6 +733,9 @@ final class AppStore: ObservableObject {
         voiceAnalysisSummary = ""
         externalDialogText = "Ready to speak to the operator."
         internalDialogText = "Internal guided-loop narration will appear here."
+        pendingOperatorPrompt = nil
+        pendingOperatorResponseDraft = ""
+        awaitingOperatorInput = false
         sessionStartedAt = .now
         sessionNumber = 1
         conversationEntries = []
@@ -687,6 +775,7 @@ final class AppStore: ObservableObject {
             mission: storedMissionText,
             operatorFeedback: storedOperatorFeedback
         )
+        startupRecoverySnapshot = storedRecoverySnapshot
         refreshAutomationStatusMessage()
     }
 
@@ -732,8 +821,15 @@ final class AppStore: ObservableObject {
         conversationEntries.filter { $0.speaker != .system }.count
     }
 
+    var hasPendingOperatorPrompt: Bool {
+        pendingOperatorPrompt != nil
+    }
+
     var canRunLoop: Bool {
-        !missionText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && status != .running && loopTask == nil && !awaitingActionConfirmation
+        !missionText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        status != .running &&
+        loopTask == nil &&
+        !hasBlockingOperatorPrompt
     }
 
     var activeDecisionProfile: DecisionProfile {
@@ -741,11 +837,15 @@ final class AppStore: ObservableObject {
     }
 
     var isGuidedLoopRunning: Bool {
-        status == .running || loopTask != nil || awaitingActionConfirmation
+        status == .running || loopTask != nil || hasBlockingOperatorPrompt
     }
 
     var isVoiceLoopActive: Bool {
         voiceLoopEnabled || isGuidedLoopRunning
+    }
+
+    private var hasBlockingOperatorPrompt: Bool {
+        pendingOperatorPrompt?.kind.blocksLoop == true
     }
 
     var actionGraphSnapshot: ActionGraphSnapshot {
@@ -815,7 +915,11 @@ final class AppStore: ObservableObject {
     }
 
     func startNewSession() {
-        resolvePendingActionApproval(with: .revise)
+        resolvePendingOperatorPrompt(
+            decision: .revise,
+            response: pendingOperatorResponseDraft,
+            handledInternally: true
+        )
         loopTask?.cancel()
         loopTask = nil
         listeningRestartTask?.cancel()
@@ -868,6 +972,7 @@ final class AppStore: ObservableObject {
         selectedCycleID = starterCycle.id
         conversationEntries = Self.bootstrapConversationEntries(mission: "", operatorFeedback: "")
         persistWorkspaceDraft()
+        startupRecoverySnapshot = nil
 
         if chatGPTAPIKey.isEmpty {
             status = .awaitingAPIKey
@@ -957,14 +1062,13 @@ final class AppStore: ObservableObject {
         guard !didAutoStart else { return }
         didAutoStart = true
 
-        guard !chatGPTAPIKey.isEmpty else {
+        if chatGPTAPIKey.isEmpty {
             status = .awaitingAPIKey
             statusMessage = "Add your ChatGPT API key in settings to start the guided loop."
-            return
+        } else {
+            status = .idle
+            statusMessage = "Ready. Start the \(activeDecisionProfile.title) voice loop when you want to begin."
         }
-
-        status = .idle
-        statusMessage = "Ready. Start the \(activeDecisionProfile.title) voice loop when you want to begin."
         recordingStatusMessage = missionText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             ? "Ready. Start the voice loop to capture the mission."
             : "Mission ready. Start the guided voice loop to run it with live steering."
@@ -977,6 +1081,96 @@ final class AppStore: ObservableObject {
             transcript: nil,
             clearTranscript: missionText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         )
+        persistRecoverySnapshot()
+        presentStartupAssessmentIfNeeded()
+    }
+
+    private func presentStartupAssessmentIfNeeded() {
+        guard pendingOperatorPrompt == nil else { return }
+
+        let snapshot = startupRecoverySnapshot ?? currentRecoverySnapshot()
+        guard snapshot.hasRecoverableState else { return }
+
+        let cycleWord = snapshot.cycleCount == 1 ? "cycle" : "cycles"
+        let progressPercent = Int(snapshot.lastCycleProgress * 100)
+        let summaryLine = snapshot.lastCycleSummary.trimmingCharacters(in: .whitespacesAndNewlines)
+        let missionLine = snapshot.mission.trimmingCharacters(in: .whitespacesAndNewlines)
+        let savedAtLine = "Saved at: \(snapshot.lastCycleTimestamp.formatted(date: .abbreviated, time: .shortened))"
+        let prompt = OperatorPrompt(
+            kind: .startupAssessment,
+            title: "Startup Assessment",
+            question: "I found a previous session with \(snapshot.cycleCount) \(cycleWord). Continue forward from that saved state?",
+            detail: [
+                missionLine.isEmpty ? nil : "Mission: \(missionLine)",
+                "Last status: \(snapshot.lastStatusTitle)",
+                "Saved progress: \(progressPercent)%",
+                savedAtLine,
+                summaryLine.isEmpty ? nil : "Last cycle: \(summaryLine)"
+            ]
+            .compactMap { $0 }
+            .joined(separator: "\n"),
+            proceedLabel: "Continue Forward",
+            reviseLabel: "New Session",
+            responsePlaceholder: "Optional note before continuing"
+        )
+
+        statusMessage = "Startup assessment ready. Continue from the saved state or reset into a new session."
+        recordingStatusMessage = "Recovery check ready. Confirm whether to continue the saved session."
+        updateVoiceFlow(
+            state: .idle,
+            title: "Startup assessment",
+            detail: "A previous session was found after launch. Confirm whether xmaxx should continue from that state or start fresh.",
+            transcript: nil
+        )
+        recordComputerDialogue(
+            external: prompt.question,
+            internal: prompt.detail,
+            note: "Startup recovery check after launch."
+        )
+        presentOperatorPrompt(prompt)
+        startupRecoverySnapshot = nil
+    }
+
+    private func currentRecoverySnapshot() -> RecoverySnapshot {
+        let latestCycle = cycles.first ?? NavigationCycle(
+            iteration: 0,
+            createdAt: .now,
+            mission: missionText,
+            environment: environmentText,
+            summary: statusMessage,
+            model: "Planning Shell",
+            progress: objectiveProgress,
+            objectiveMet: false,
+            isBlocked: false,
+            blocker: nil,
+            sections: sections,
+            actions: actionQueue
+        )
+
+        return RecoverySnapshot(
+            mission: missionText,
+            operatorFeedback: operatorFeedback,
+            cycleCount: cycles.count,
+            lastCycleSummary: latestCycle.summary,
+            lastCycleProgress: latestCycle.progress,
+            lastCycleTimestamp: latestCycle.createdAt,
+            lastStatusTitle: status.title,
+            voiceLoopEnabled: voiceLoopEnabled
+        )
+    }
+
+    private func persistRecoverySnapshot() {
+        let snapshot = currentRecoverySnapshot()
+        guard let data = try? JSONEncoder().encode(snapshot) else { return }
+        userDefaults.set(data, forKey: recoverySnapshotKey)
+    }
+
+    private static func loadRecoverySnapshot(
+        from userDefaults: UserDefaults,
+        key: String
+    ) -> RecoverySnapshot? {
+        guard let data = userDefaults.data(forKey: key) else { return nil }
+        return try? JSONDecoder().decode(RecoverySnapshot.self, from: data)
     }
 
     func updateSettings(profileName: String, chatGPTAPIKey: String) {
@@ -1051,6 +1245,7 @@ final class AppStore: ObservableObject {
         userDefaults.set(maxIterations, forKey: maxIterationsKey)
         userDefaults.set(voiceLoopEnabled, forKey: voiceLoopEnabledKey)
         userDefaults.set(selectedDecisionModels.map(\.rawValue), forKey: selectedDecisionModelsKey)
+        persistRecoverySnapshot()
     }
 
     func selectCycle(_ cycle: NavigationCycle) {
@@ -1061,6 +1256,7 @@ final class AppStore: ObservableObject {
         currentIteration = cycle.iteration
         status = cycle.objectiveMet ? .completed : (cycle.isBlocked ? .blocked : .ready)
         statusMessage = cycle.summary
+        persistRecoverySnapshot()
     }
 
     private func refreshDecisionModelScaffoldIfNeeded() {
@@ -1189,7 +1385,10 @@ final class AppStore: ObservableObject {
 
     func stopLoop() {
         let wasAwaitingActionConfirmation = awaitingActionConfirmation
-        resolvePendingActionApproval(with: .revise)
+        resolvePendingOperatorPrompt(
+            decision: .revise,
+            response: pendingOperatorResponseDraft
+        )
         loopTask?.cancel()
         loopTask = nil
 
@@ -1200,6 +1399,7 @@ final class AppStore: ObservableObject {
                 external: "Stopping now.",
                 internal: "Loop stopped by operator."
             )
+            persistRecoverySnapshot()
             scheduleMissionListeningRestartIfNeeded()
         }
     }
@@ -1213,6 +1413,12 @@ final class AppStore: ObservableObject {
     }
 
     func startGuidedVoiceLoop() {
+        if pendingOperatorPrompt?.kind == .startupAssessment {
+            status = .ready
+            statusMessage = "Answer the startup assessment before continuing the saved session."
+            return
+        }
+
         startMissionRecording()
 
         guard !chatGPTAPIKey.isEmpty else {
@@ -1256,8 +1462,8 @@ final class AppStore: ObservableObject {
     }
 
     func confirmPendingActions() {
-        guard awaitingActionConfirmation else { return }
-        resolvePendingActionApproval(with: .confirm)
+        guard pendingOperatorPrompt?.kind == .actionApproval else { return }
+        submitPendingOperatorPromptProceed(responseOverride: "confirm action")
         status = .running
         statusMessage = "Action confirmation received. Executing approved actions."
         recordingStatusMessage = "Action confirmation received. Executing approved actions."
@@ -1388,11 +1594,71 @@ final class AppStore: ObservableObject {
     }
 
     private func handleCapturedSpeech(_ capture: MissionCapture) async {
+        if pendingOperatorPrompt != nil {
+            await handlePendingOperatorPromptCapture(capture)
+            return
+        }
+
         if status == .running || loopTask != nil {
             await processOperatorSteering(capture)
         } else {
             await processCapturedMission(capture)
         }
+    }
+
+    private func handlePendingOperatorPromptCapture(_ capture: MissionCapture) async {
+        let trimmedTranscript = capture.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let prompt = pendingOperatorPrompt else {
+            capture.deleteTemporaryAudioFileIfNeeded()
+            return
+        }
+
+        guard !trimmedTranscript.isEmpty else {
+            discardLiveVoiceDraftIfNeeded()
+            capture.deleteTemporaryAudioFileIfNeeded()
+            return
+        }
+
+        let normalized = trimmedTranscript.lowercased()
+        let detail: String
+        if prompt.kind == .actionApproval && isActionConfirmationCommand(normalized) {
+            detail = "Captured as approval for the current plan."
+            finalizeVoiceDraft(
+                transcript: trimmedTranscript,
+                detail: detail,
+                state: .captured
+            )
+            submitPendingOperatorPromptProceed(
+                responseOverride: trimmedTranscript,
+                handledInternally: true
+            )
+        } else if isPromptRevisionCommand(normalized) {
+            detail = prompt.kind == .startupAssessment
+                ? "Captured as request to start a new session."
+                : "Captured as request to revise before proceeding."
+            finalizeVoiceDraft(
+                transcript: trimmedTranscript,
+                detail: detail,
+                state: .captured
+            )
+            submitPendingOperatorPromptRevise(
+                responseOverride: trimmedTranscript,
+                handledInternally: true
+            )
+        } else {
+            detail = "Captured as the answer to the open question."
+            finalizeVoiceDraft(
+                transcript: trimmedTranscript,
+                detail: detail,
+                state: .processing
+            )
+            submitPendingOperatorPromptProceed(
+                responseOverride: trimmedTranscript,
+                handledInternally: true
+            )
+        }
+
+        capture.deleteTemporaryAudioFileIfNeeded()
     }
 
     private func processCapturedMission(_ capture: MissionCapture) async {
@@ -1495,7 +1761,7 @@ final class AppStore: ObservableObject {
                 detail: "Your speech was appended to the operator feedback and the plan is being revised before any action runs.",
                 transcript: trimmedTranscript
             )
-            resolvePendingActionApproval(with: .revise)
+            submitPendingOperatorPromptRevise(responseOverride: trimmedTranscript, handledInternally: true)
             return
         }
 
@@ -1673,22 +1939,81 @@ final class AppStore: ObservableObject {
         }
     }
 
+    private func requiresLongRunningCheckpoint(for actions: [ActionItem]) -> Bool {
+        let actionableCount = actions.filter { $0.status == .queued || $0.status == .ready }.count
+        let includesShellPlan = actions.contains {
+            $0.tool.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "shell_command"
+        }
+
+        return actionableCount >= 4 || (includesShellPlan && actionableCount >= 2)
+    }
+
     private func isExecutableActionTool(_ tool: String) -> Bool {
         let normalizedTool = tool.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         return normalizedTool == "mouse_move" || normalizedTool == "mouse_click" || normalizedTool == "mouse_right_click"
     }
 
-    private func waitForPendingActionApproval() async -> ActionApprovalDecision {
-        await withCheckedContinuation { continuation in
-            actionApprovalContinuation = continuation
+    private func presentOperatorPrompt(_ prompt: OperatorPrompt, initialResponse: String = "") {
+        pendingOperatorPrompt = prompt
+        pendingOperatorResponseDraft = initialResponse
+        awaitingOperatorInput = true
+        awaitingActionConfirmation = prompt.kind == .actionApproval
+
+        if prompt.kind.blocksLoop {
+            status = .ready
+            recordingStatusMessage = prompt.question
+            updateVoiceFlow(
+                state: .captured,
+                title: prompt.title,
+                detail: prompt.question,
+                transcript: nil
+            )
         }
     }
 
-    private func resolvePendingActionApproval(with decision: ActionApprovalDecision) {
+    private func waitForOperatorPrompt(
+        _ prompt: OperatorPrompt,
+        initialResponse: String = ""
+    ) async -> OperatorPromptResult {
+        await withCheckedContinuation { continuation in
+            self.operatorPromptContinuation = continuation
+            self.presentOperatorPrompt(prompt, initialResponse: initialResponse)
+        }
+    }
+
+    private func resolvePendingOperatorPrompt(
+        decision: OperatorPromptDecision,
+        response: String? = nil,
+        handledInternally: Bool = false
+    ) {
+        let trimmedResponse = (response ?? pendingOperatorResponseDraft)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let prompt = pendingOperatorPrompt
+        let continuation = operatorPromptContinuation
+
+        pendingOperatorPrompt = nil
+        pendingOperatorResponseDraft = ""
+        awaitingOperatorInput = false
         awaitingActionConfirmation = false
-        let continuation = actionApprovalContinuation
-        actionApprovalContinuation = nil
-        continuation?.resume(returning: decision)
+        operatorPromptContinuation = nil
+
+        guard let prompt else { return }
+
+        let result = OperatorPromptResult(
+            decision: decision,
+            response: trimmedResponse
+        )
+
+        if !handledInternally {
+            recordOperatorPromptDecision(prompt: prompt, result: result)
+        }
+
+        if let continuation {
+            continuation.resume(returning: result)
+            return
+        }
+
+        handleStandaloneOperatorPrompt(prompt: prompt, result: result)
     }
 
     private func isActionConfirmationCommand(_ normalizedTranscript: String) -> Bool {
@@ -1708,6 +2033,136 @@ final class AppStore: ObservableObject {
         ]
 
         return phrases.contains { normalizedTranscript.contains($0) }
+    }
+
+    private func isPromptRevisionCommand(_ normalizedTranscript: String) -> Bool {
+        let phrases = [
+            "new session",
+            "start new session",
+            "start fresh",
+            "start over",
+            "reset session",
+            "revise",
+            "change it",
+            "not yet",
+            "hold on",
+            "wait",
+            "stop here"
+        ]
+
+        return phrases.contains { normalizedTranscript.contains($0) }
+    }
+
+    func proceedPendingOperatorPrompt() {
+        submitPendingOperatorPromptProceed()
+    }
+
+    private func submitPendingOperatorPromptProceed(
+        responseOverride: String? = nil,
+        handledInternally: Bool = false
+    ) {
+        guard let prompt = pendingOperatorPrompt else { return }
+        let response = (responseOverride ?? pendingOperatorResponseDraft)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !prompt.requiresResponse || !response.isEmpty else { return }
+        resolvePendingOperatorPrompt(
+            decision: .proceed,
+            response: response,
+            handledInternally: handledInternally
+        )
+    }
+
+    func revisePendingOperatorPrompt() {
+        resolvePendingOperatorPrompt(decision: .revise)
+    }
+
+    private func submitPendingOperatorPromptRevise(
+        responseOverride: String? = nil,
+        handledInternally: Bool = false
+    ) {
+        resolvePendingOperatorPrompt(
+            decision: .revise,
+            response: responseOverride,
+            handledInternally: handledInternally
+        )
+    }
+
+    private func recordOperatorPromptDecision(
+        prompt: OperatorPrompt,
+        result: OperatorPromptResult
+    ) {
+        let defaultText = result.decision == .proceed ? prompt.proceedLabel : prompt.reviseLabel
+        let detail: String
+        switch prompt.kind {
+        case .startupAssessment:
+            detail = result.decision == .proceed
+                ? "Startup assessment accepted."
+                : "Startup assessment rejected. Resetting into a new session."
+        case .actionApproval:
+            detail = result.decision == .proceed
+                ? "Approved the current executable plan."
+                : "Requested revisions before execution."
+        case .checkpoint:
+            detail = result.decision == .proceed
+                ? "Checkpoint approved."
+                : "Checkpoint paused for more feedback."
+        }
+
+        appendConversationEntry(
+            ConversationMessage(
+                speaker: .user,
+                text: result.response.isEmpty ? defaultText : result.response,
+                detail: detail,
+                state: .captured
+            )
+        )
+    }
+
+    private func handleStandaloneOperatorPrompt(
+        prompt: OperatorPrompt,
+        result: OperatorPromptResult
+    ) {
+        switch prompt.kind {
+        case .startupAssessment:
+            if result.decision == .revise {
+                startNewSession()
+                return
+            }
+
+            if !result.response.isEmpty {
+                operatorFeedback = appendOperatorFeedbackEntry(result.response, to: operatorFeedback)
+                persistWorkspaceDraft()
+            }
+
+            statusMessage = "Recovered startup state. Continue forward when ready."
+            recordingStatusMessage = "Recovery accepted. Resume the saved mission whenever you are ready."
+            updateVoiceFlow(
+                state: .idle,
+                title: "Recovery accepted",
+                detail: "The saved session remains loaded. Start the loop again or add more feedback before continuing.",
+                transcript: nil
+            )
+            persistRecoverySnapshot()
+
+        case .actionApproval, .checkpoint:
+            break
+        }
+    }
+
+    private func shouldReplanAfterOperatorPrompt(_ result: OperatorPromptResult) -> Bool {
+        let trimmedResponse = result.response.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if !trimmedResponse.isEmpty {
+            operatorFeedback = appendOperatorFeedbackEntry(trimmedResponse, to: operatorFeedback)
+            persistWorkspaceDraft()
+        }
+
+        switch result.decision {
+        case .proceed:
+            return !trimmedResponse.isEmpty
+        case .revise:
+            return true
+        }
     }
 
     private func restartLoopPlanningWithLatestContext() {
@@ -1773,26 +2228,62 @@ final class AppStore: ObservableObject {
             objectiveProgress = result.progress
 
             if !result.objectiveMet && !result.isBlocked && requiresActionConfirmation(for: result.actions) {
-                awaitingActionConfirmation = true
+                let prompt = OperatorPrompt(
+                    kind: .actionApproval,
+                    title: "Action Approval",
+                    question: "Plan ready. Say confirm action to execute, or keep talking to revise.",
+                    detail: "Cycle \(iteration) is waiting for approval before any executable action runs.",
+                    proceedLabel: "Approve Actions",
+                    reviseLabel: "Revise Plan"
+                )
                 status = .ready
-                statusMessage = "Plan ready. Say 'confirm action' to execute or keep talking to revise."
+                statusMessage = prompt.question
                 recordComputerDialogue(
-                    external: "Plan ready. Say confirm action to execute, or keep talking to revise.",
+                    external: prompt.question,
                     internal: "Waiting for action confirmation on cycle \(iteration). Fresh operator speech will revise the plan before any action executes.",
-                    note: "Waiting for approval before any executable action runs."
+                    note: prompt.detail
                 )
 
-                switch await waitForPendingActionApproval() {
-                case .revise:
-                    try Task.checkCancellation()
+                let approvalResult = await waitForOperatorPrompt(prompt)
+                try Task.checkCancellation()
+
+                if shouldReplanAfterOperatorPrompt(approvalResult) {
                     status = .running
                     statusMessage = "Replanning with updated operator guidance."
                     continue
-                case .confirm:
-                    try Task.checkCancellation()
-                    status = .running
-                    statusMessage = "Action confirmation received. Executing approved actions."
                 }
+
+                status = .running
+                statusMessage = "Action confirmation received. Executing approved actions."
+            } else if !result.objectiveMet && !result.isBlocked && requiresLongRunningCheckpoint(for: result.actions) {
+                let prompt = OperatorPrompt(
+                    kind: .checkpoint,
+                    title: "Long-Run Checkpoint",
+                    question: "This cycle spans multiple steps. Proceed forward, or add feedback before xmaxx continues?",
+                    detail: result.summary,
+                    proceedLabel: "Proceed Forward",
+                    reviseLabel: "Add Feedback",
+                    responsePlaceholder: "Optional checkpoint note or constraint"
+                )
+                status = .ready
+                statusMessage = prompt.question
+                recordComputerDialogue(
+                    external: prompt.question,
+                    internal: "Checkpoint requested on cycle \(iteration) because the current plan is a longer multi-step act.",
+                    note: prompt.detail
+                )
+
+                let checkpointResult = await waitForOperatorPrompt(prompt)
+                try Task.checkCancellation()
+
+                if shouldReplanAfterOperatorPrompt(checkpointResult) {
+                    status = .running
+                    statusMessage = "Checkpoint feedback received. Replanning with the latest operator input."
+                    continue
+                }
+
+                status = .running
+                statusMessage = "Checkpoint cleared. Continuing the current plan."
             }
 
             let executedActions = await executeActions(result.actions)
@@ -1827,6 +2318,7 @@ final class AppStore: ObservableObject {
             cycles.insert(cycle, at: 0)
             selectedCycleID = cycle.id
             objectiveProgress = cycle.progress
+            persistRecoverySnapshot()
             deliverDialogue(
                 external: cycle.externalDialogue,
                 internal: cycle.internalDialogue

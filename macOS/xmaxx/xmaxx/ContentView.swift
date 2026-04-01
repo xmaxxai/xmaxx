@@ -347,18 +347,8 @@ private struct ControlDeckPanel: View {
                 }
 
                 VStack(alignment: .leading, spacing: 10) {
-                    if store.awaitingActionConfirmation {
-                        Button("Approve Actions") {
-                            store.confirmPendingActions()
-                        }
-                        .font(.system(size: 13, weight: .bold, design: .rounded))
-                        .foregroundStyle(Color.white.opacity(0.92))
-                        .buttonStyle(.plain)
-
-                        Text("The loop is holding execution until you approve. Keep talking to revise the plan before anything runs.")
-                            .font(.system(size: 12, weight: .medium, design: .rounded))
-                            .foregroundStyle(Color.white.opacity(0.54))
-                            .fixedSize(horizontal: false, vertical: true)
+                    if let prompt = store.pendingOperatorPrompt {
+                        OperatorPromptCard(store: store, prompt: prompt)
                     }
 
                     if store.chatGPTAPIKey.isEmpty {
@@ -697,6 +687,8 @@ private struct ActivityRail: View {
                         railBadge(title: store.voiceFlowState.title, accent: voiceFlowAccent)
                         if store.awaitingActionConfirmation {
                             railBadge(title: "Approval", accent: Color(red: 0.98, green: 0.74, blue: 0.28))
+                        } else if store.hasPendingOperatorPrompt {
+                            railBadge(title: "Question", accent: Color(red: 0.55, green: 0.84, blue: 0.65))
                         }
                     }
 
@@ -1198,6 +1190,122 @@ private struct ContextEditor: View {
                         .stroke(Color.white.opacity(0.08), lineWidth: 1)
                 }
         }
+    }
+}
+
+private struct OperatorPromptCard: View {
+    @ObservedObject var store: AppStore
+    let prompt: OperatorPrompt
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 10) {
+                Image(systemName: prompt.kind == .startupAssessment ? "clock.arrow.trianglehead.counterclockwise.rotate.90" : "questionmark.bubble.fill")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(accent)
+
+                Text(prompt.title)
+                    .font(.system(size: 14, weight: .black, design: .rounded))
+                    .foregroundStyle(.white)
+
+                Spacer()
+
+                Text(prompt.kind == .startupAssessment ? "Recovery" : "Waiting")
+                    .font(.system(size: 10, weight: .black, design: .rounded))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(accent.opacity(0.22))
+                    )
+            }
+
+            Text(prompt.question)
+                .font(.system(size: 14, weight: .bold, design: .rounded))
+                .foregroundStyle(.white)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Text(prompt.detail)
+                .font(.system(size: 12, weight: .medium, design: .rounded))
+                .foregroundStyle(Color.white.opacity(0.66))
+                .fixedSize(horizontal: false, vertical: true)
+
+            if prompt.acceptsResponse {
+                TextField(prompt.responsePlaceholder, text: $store.pendingOperatorResponseDraft, axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                    .foregroundStyle(.white)
+                    .padding(12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(Color.black.opacity(0.18))
+                    )
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                    }
+            }
+
+            HStack(spacing: 10) {
+                Button(prompt.proceedLabel) {
+                    if prompt.kind == .actionApproval {
+                        store.confirmPendingActions()
+                    } else {
+                        store.proceedPendingOperatorPrompt()
+                    }
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(proceedEnabled ? Color.black.opacity(0.82) : Color.white.opacity(0.46))
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(proceedEnabled ? accent : Color.white.opacity(0.10))
+                )
+                .disabled(!proceedEnabled)
+
+                Button(prompt.reviseLabel) {
+                    store.revisePendingOperatorPrompt()
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.white.opacity(0.86))
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(Color.white.opacity(0.08))
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                }
+            }
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(accent.opacity(0.12))
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(accent.opacity(0.24), lineWidth: 1)
+        }
+    }
+
+    private var accent: Color {
+        switch prompt.kind {
+        case .startupAssessment:
+            return Color(red: 0.42, green: 0.77, blue: 0.96)
+        case .actionApproval:
+            return Color(red: 0.98, green: 0.74, blue: 0.28)
+        case .checkpoint:
+            return Color(red: 0.55, green: 0.84, blue: 0.65)
+        }
+    }
+
+    private var proceedEnabled: Bool {
+        !prompt.requiresResponse || !store.pendingOperatorResponseDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 }
 
