@@ -1367,6 +1367,7 @@ final class AppStore: ObservableObject {
         preserveVoiceLoop: Bool = false,
         supplementalEnvironment: String = ""
     ) {
+        print("Running navigation loop at \(Date())")
         pauseMissionRecordingForProcessing()
         loopTask?.cancel()
         persistWorkspaceDraft()
@@ -1661,6 +1662,7 @@ final class AppStore: ObservableObject {
     }
 
     private func handleCapturedSpeech(_ capture: MissionCapture) async {
+        print("Handling captured speech at \(Date())")
         if pendingOperatorPrompt != nil {
             await handlePendingOperatorPromptCapture(capture)
             return
@@ -1729,6 +1731,7 @@ final class AppStore: ObservableObject {
     }
 
     private func processCapturedMission(_ capture: MissionCapture) async {
+        print("Processing captured mission at \(Date())")
         let trimmedTranscript = capture.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedTranscript.isEmpty else {
             clearMissionDraftPreview()
@@ -2261,6 +2264,7 @@ final class AppStore: ObservableObject {
         environment: String,
         operatorFeedback: String
     ) async throws {
+        print("Running loop session at \(Date())")
         var history: [NavigationCycle] = []
         let limit = min(max(maxIterations, 1), 12)
         var iteration = 1
@@ -2282,6 +2286,7 @@ final class AppStore: ObservableObject {
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             let decisionProfile = self.activeDecisionProfile
 
+            print("Starting API call for cycle \(iteration) at \(Date())")
             let result = try await client.generateNavigationLoop(
                 apiKey: chatGPTAPIKey,
                 profileName: profileName,
@@ -2293,6 +2298,7 @@ final class AppStore: ObservableObject {
                 priorCycles: history,
                 decisionProfile: decisionProfile
             )
+            print("API call completed for cycle \(iteration) at \(Date())")
 
             sections = result.sections
             actionQueue = result.actions
@@ -2511,6 +2517,7 @@ final class AppStore: ObservableObject {
         internal internalText: String,
         note: String? = nil
     ) {
+        print("Delivering dialogue at \(Date())")
         recordComputerDialogue(external: external, internal: internalText, note: note)
 
         guard audioResponsesEnabled else { return }
@@ -2715,6 +2722,7 @@ final class AppStore: ObservableObject {
     }
 
     private func executeActions(_ actions: [ActionItem]) async -> [ActionItem] {
+        print("Executing actions at \(Date())")
         var updatedActions = actions
         var resolvedTargets: [String: CGPoint] = [:]
 
@@ -3135,6 +3143,7 @@ private struct OpenAIClient {
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
+        request.timeoutInterval = 30.0
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
 
@@ -3559,6 +3568,9 @@ private final class MissionTranscriber {
         onUpdate: @escaping @Sendable (String) -> Void,
         onFinal: @escaping @Sendable (MissionCapture) -> Void
     ) async throws {
+        let startTime = Date()
+        print("Speech recognition start initiated at \(startTime)")
+
         guard let recognizer else {
             throw MissionTranscriberError.unavailable
         }
@@ -3567,16 +3579,21 @@ private final class MissionTranscriber {
             throw MissionTranscriberError.unavailable
         }
 
+        print("Recognizer available, requesting speech auth at \(Date().timeIntervalSince(startTime))s")
         let speechStatus = await requestSpeechAuthorization()
+        print("Speech auth completed at \(Date().timeIntervalSince(startTime))s, status: \(speechStatus)")
         guard speechStatus == .authorized else {
             throw MissionTranscriberError.speechPermissionDenied
         }
 
+        print("Requesting mic permission at \(Date().timeIntervalSince(startTime))s")
         let microphoneGranted = await requestMicrophonePermission()
+        print("Mic permission completed at \(Date().timeIntervalSince(startTime))s, granted: \(microphoneGranted)")
         guard microphoneGranted else {
             throw MissionTranscriberError.microphonePermissionDenied
         }
 
+        print("Stopping previous session at \(Date().timeIntervalSince(startTime))s")
         stop()
         lastTranscript = ""
         lastRecognitionEmission = ""
@@ -3586,6 +3603,7 @@ private final class MissionTranscriber {
         finalHandler = onFinal
         lastSpeechActivityNanoseconds = 0
 
+        print("Setting up audio engine at \(Date().timeIntervalSince(startTime))s")
         let inputNode = audioEngine.inputNode
         let format = inputNode.outputFormat(forBus: 0)
         currentUtteranceSampleRate = format.sampleRate
@@ -3596,15 +3614,20 @@ private final class MissionTranscriber {
             self?.captureAudioBufferIfNeeded(buffer)
         }
 
+        print("Preparing audio engine at \(Date().timeIntervalSince(startTime))s")
         audioEngine.prepare()
+        print("Starting audio engine at \(Date().timeIntervalSince(startTime))s")
         try audioEngine.start()
+        print("Audio engine started at \(Date().timeIntervalSince(startTime))s")
 
         isRunning = true
         isSegmentDeliveryEnabled = true
         playbackEchoReference = ""
         playbackEchoDeadline = .distantPast
         _ = initialText
+        print("Starting recognition session at \(Date().timeIntervalSince(startTime))s")
         startRecognitionSession()
+        print("Speech recognition fully started at \(Date().timeIntervalSince(startTime))s")
     }
 
     func stop() {
@@ -4330,6 +4353,7 @@ private final class SpeechCoordinator: NSObject {
     }
 
     func speakAndWait(text: String, elevenLabsAPIKey: String?) async {
+        print("Starting speech synthesis at \(Date())")
         let cleanedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanedText.isEmpty else { return }
 
@@ -4343,6 +4367,7 @@ private final class SpeechCoordinator: NSObject {
                 audioPlayer?.prepareToPlay()
                 audioPlayer?.play()
                 await waitForPlaybackToFinish()
+                print("Speech synthesis completed at \(Date())")
                 return
             } catch {
                 // Fall through to the macOS system voice when ElevenLabs is unavailable.
@@ -4354,6 +4379,7 @@ private final class SpeechCoordinator: NSObject {
         utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
         fallbackSynthesizer.speak(utterance)
         await waitForPlaybackToFinish()
+        print("Speech synthesis completed at \(Date())")
     }
 
     private func stopCurrentPlayback() {
