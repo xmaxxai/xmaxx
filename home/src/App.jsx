@@ -1207,7 +1207,7 @@ function HomePage({
       <section className="hero-panel" id="overview">
         <div className="hero-copy">
           <p className="eyebrow">MAXX open source project</p>
-          <h1>Automate Everything.</h1>
+          <h1>Automate Everything to the MAXX.</h1>
           <p className="hero-copy__lede">
             MAXX is an open source project focused on one thing: automating work across software,
             computers, and machines from a single control layer.
