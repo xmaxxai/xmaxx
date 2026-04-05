@@ -1203,8 +1203,7 @@ function HomePage({
             computers, and machines from a single control layer.
           </p>
           <p className="hero-copy__support">
-            The main page should make that clear. MAXX is formal where it needs to be:
-            practical automation, visible execution, and an open product surface.
+            MAXX is focused on practical automation, visible execution, and an open product surface.
           </p>
 
           <div className="verb-strip" aria-label="XMAXX control scope">
