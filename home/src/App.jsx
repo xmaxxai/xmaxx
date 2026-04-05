@@ -176,10 +176,22 @@ const approachExamples = [
 ]
 
 const buildUseCases = [
-  'Autonomous drone patrol systems',
-  'Infrastructure inspection workflows',
-  'Computer automation pipelines',
-  'Multi-device orchestration',
+  {
+    title: 'Autonomous drone patrol systems',
+    description: 'Persistent mission flows for surveillance, patrol, and repeatable flight operations.',
+  },
+  {
+    title: 'Infrastructure inspection workflows',
+    description: 'Inspection runs that combine operator intent, mission logic, and live machine execution.',
+  },
+  {
+    title: 'Computer automation pipelines',
+    description: 'Desktop and system tasks that move from manual clicking into repeatable execution paths.',
+  },
+  {
+    title: 'Multi-device orchestration',
+    description: 'One control layer coordinating several machines, devices, and task surfaces together.',
+  },
 ]
 
 const builderPoints = [
@@ -192,6 +204,17 @@ const communityPoints = [
   'Transparent',
   'Extensible',
   'Owned by builders',
+]
+
+const supportOptions = [
+  {
+    title: 'Open source support',
+    description: 'Need help evaluating, deploying, or extending the XMAXX stack for your team.',
+  },
+  {
+    title: 'Builder collaboration',
+    description: 'Use the public repo, issues, and community channels to shape the control layer in public.',
+  },
 ]
 
 const commandSurfaces = [
@@ -1346,21 +1369,36 @@ function HomePage({
           <h2>Use cases that stay grounded in real operations.</h2>
         </div>
 
-        <div className="hardware-highlights">
-          {buildUseCases.map((item) => (
-            <span key={item}>{item}</span>
+        <div className="use-case-grid">
+          {buildUseCases.map(({ title, description }) => (
+            <article className="use-case-card" key={title}>
+              <p className="section-kicker">Use Case</p>
+              <h3>{title}</h3>
+              <p>{description}</p>
+            </article>
           ))}
         </div>
       </section>
 
       <section className="section-block" id="builders">
-        <div className="section-heading">
-          <p className="eyebrow">Built for Developers and Operators</p>
-          <h2>Control without unnecessary complexity.</h2>
-          <p>
-            XMAXX is designed for builders who want an open system they can inspect,
-            extend, and deploy into real operations.
-          </p>
+        <div className="section-split">
+          <div className="section-heading">
+            <p className="eyebrow">Built for Developers and Operators</p>
+            <h2>Control without unnecessary complexity.</h2>
+            <p>
+              XMAXX is designed for builders who want an open system they can inspect,
+              extend, and deploy into real operations.
+            </p>
+          </div>
+
+          <div className="section-aside">
+            <p className="section-kicker">Builder posture</p>
+            <h3>Real product, real stack, real extension surface.</h3>
+            <p>
+              The core system is structured so teams can adapt it instead of working around
+              it with custom glue for every deployment.
+            </p>
+          </div>
         </div>
 
         <div className="spec-grid">
@@ -1378,18 +1416,33 @@ function HomePage({
       </section>
 
       <section className="section-block">
-        <div className="section-heading">
-          <p className="eyebrow">Open Source. Built in Public.</p>
-          <h2>XMAXX is an open project.</h2>
-          <p>
-            Control systems should be transparent, extensible, and owned by builders,
-            not hidden behind closed interfaces.
-          </p>
+        <div className="section-split">
+          <div className="section-heading">
+            <p className="eyebrow">Open Source. Built in Public.</p>
+            <h2>XMAXX is an open project.</h2>
+            <p>
+              Control systems should be transparent, extensible, and owned by builders,
+              not hidden behind closed interfaces.
+            </p>
+          </div>
+
+          <div className="section-aside section-aside--accent">
+            <p className="section-kicker">Support</p>
+            <h3>Need support for the open source stack?</h3>
+            <p>
+              Use GitHub to follow the public build, open issues, and track delivery. If you
+              need help adopting or extending XMAXX, start from the repo and community surface.
+            </p>
+          </div>
         </div>
 
-        <div className="hardware-highlights">
-          {communityPoints.map((item) => (
-            <span key={item}>{item}</span>
+        <div className="support-grid">
+          {supportOptions.map(({ title, description }) => (
+            <article className="support-card" key={title}>
+              <p className="section-kicker">Support Path</p>
+              <h3>{title}</h3>
+              <p>{description}</p>
+            </article>
           ))}
         </div>
 
