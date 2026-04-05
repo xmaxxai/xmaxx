@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/xmaxxai/xmaxx/main/logo.png" alt="XMAXX logo" width="220">
+  <img src="https://raw.githubusercontent.com/xmaxxai/xmaxx/main/logo.png" alt="XMAXX logo" >
 </p>
 
 # XMAXX
