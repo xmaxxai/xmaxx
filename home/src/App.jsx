@@ -3,9 +3,10 @@ import { ApiTokensPage, ProfilePage } from './components/ProfileWorkspace'
 import './index.css'
 
 const homeNavLinks = [
-  { href: '#about', label: 'About', page: 'home' },
-  { href: '#open-source', label: 'Open Source', page: 'home' },
-  { href: '#runtime', label: 'Runtime', page: 'home' },
+  { href: '#what-is-xmaxx', label: 'What It Is', page: 'home' },
+  { href: '#how-it-works', label: 'How It Works', page: 'home' },
+  { href: '#open-source-drone', label: 'Drone Stack', page: 'home' },
+  { href: '#builders', label: 'Builders', page: 'home' },
   { href: '/computer', label: 'XMAXX Computer', page: 'computer' },
 ]
 
@@ -29,7 +30,7 @@ const socialLinks = [
     handle: 'xmaxxai',
     icon: 'github-icon',
     viewBox: '0 0 19 19',
-    detail: 'Source, forks, and public build path',
+    detail: 'Source, issues, and open build path',
   },
   {
     href: 'https://x.com/xmaxxai',
@@ -37,97 +38,160 @@ const socialLinks = [
     handle: 'xmaxxai',
     icon: 'x-icon',
     viewBox: '0 0 19 19',
-    detail: 'Signals, drops, and live updates',
+    detail: 'Updates from the public build',
   },
 ]
 
 const openSourcePoints = [
   {
-    title: 'Public codebase',
+    title: 'Control drones',
     description:
-      'The stack is being built in public: infrastructure, frontend, backend, deployment path, and release wiring all live in the repo.',
+      'Coordinate missions and automate flight workflows without rebuilding the control path from scratch each time.',
   },
   {
-    title: 'Forkable runtime',
+    title: 'Automate computers',
     description:
-      'XMAXX is meant to be extended. Builders should be able to inspect how it works, adapt it, and ship their own versions.',
+      'Use one system to drive software execution, checks, and recurring machine tasks across desktop and service surfaces.',
   },
   {
-    title: 'Real deployment path',
+    title: 'Orchestrate autonomous tasks',
     description:
-      'Open source here means more than source visibility. The app, registry, Terraform, and cluster delivery path are all part of the same public system.',
+      'Move from one-off commands to operator-defined outcomes that run, report, and improve over time.',
   },
 ]
 
 const homeHeroStats = [
   {
-    label: 'Loop Model',
-    value: 'Observe -> Act',
-    detail: 'The app scaffolds each cycle through explicit stages and can swap between OODA, Bayes, RPD, RL, Predictive, and Cynefin lenses.',
+    label: 'Scope',
+    value: 'Drones + computers',
+    detail: 'One open control layer across flight systems, workstations, and autonomous machine workflows.',
   },
   {
-    label: 'Voice Flow',
-    value: 'Pause commits',
-    detail: 'The mic stays live, partial transcripts update in place, and each pause commits mission input or fresh steering into the loop.',
+    label: 'Model',
+    value: 'Intent -> execution',
+    detail: 'Operators define outcomes, XMAXX agents interpret them, and systems execute with visible feedback.',
   },
   {
-    label: 'Automation Reach',
-    value: 'OCR + mouse',
-    detail: 'The current build can resolve visible screen text into coordinates and execute native mouse actions when macOS permissions are granted.',
+    label: 'Posture',
+    value: 'Open source',
+    detail: 'The code, deployment path, and system surface stay inspectable and extensible for builders.',
   },
 ]
 
 const commandTargets = [
-  'Live transcript',
-  'OODA',
-  'find_screen_text',
-  'mouse_click',
-  'Approval',
-  'Cycle history',
-  'ElevenLabs',
-  'pyannoteAI',
+  'Drones',
+  'Computers',
+  'Agents',
+  'Autonomous tasks',
+  'Mission execution',
+  'System automation',
 ]
 
 const voiceHighlights = [
-  'macOS dashboard',
-  'Decision models',
-  'OCR targeting',
-  'Visible actions',
-  'Approval gates',
-  'Native mouse events',
-  'Voice steering',
+  'Open control layer',
+  'Agent execution',
+  'PX4 + ArduPilot',
+  'API extensible',
+  'Built in public',
+  'Operator-first',
 ]
 
 const voiceDeckWaves = [22, 40, 28, 56, 34, 62, 76, 48, 58, 32, 46, 24]
 
 const voiceDeckColumns = [
   {
-    title: 'Capture',
-    items: ['Mic active', 'Live transcript', 'Pause detection', 'Speaker audio capture'],
+    title: 'Input',
+    items: ['Define intent', 'Mission or task', 'Operator constraints', 'Target systems'],
   },
   {
-    title: 'Interpret',
-    items: ['Decision model', 'Mission + environment', 'Operator steering', 'Runtime capability check'],
+    title: 'Agent',
+    items: ['Interpret request', 'Plan execution', 'Resolve capabilities', 'Select actions'],
   },
   {
-    title: 'Execute',
-    items: ['find_screen_text', 'mouse_move', 'mouse_click', 'shell_command suggestion'],
+    title: 'Execution',
+    items: ['Run across devices', 'Drive systems', 'Track state', 'Return feedback'],
   },
 ]
 
 const voiceDeckActions = [
   {
-    label: 'YOU SAID',
-    detail: '"Click the visible Continue button, then tell me whether the loop is blocked."',
+    label: 'INPUT',
+    detail: 'You define intent and constraints for the task, mission, or system operation.',
   },
   {
-    label: 'XMAXX',
-    detail: 'Transcript committed, screenshot OCR requested, action queue updated, approval prompt ready.',
+    label: 'AGENT',
+    detail: 'XMAXX interprets the command and maps it into an executable control path.',
   },
   {
-    label: 'REVIEW',
-    detail: 'Executable steps stay visible. Risky moves can be revised or approved by voice before they fire.',
+    label: 'FEEDBACK',
+    detail: 'Execution results stay visible so operators can review, optimize, and iterate.',
   },
+]
+
+const operatorFlowSections = [
+  {
+    title: 'Input',
+    description: 'Operators define intent instead of wiring together low-level scripts for each system.',
+    items: ['Mission goal', 'Task constraints', 'Device context'],
+  },
+  {
+    title: 'Agent',
+    description: 'The XMAXX agent interprets the request and turns it into an execution plan.',
+    items: ['Intent parsing', 'Action planning', 'Capability matching'],
+  },
+  {
+    title: 'Execution',
+    description: 'Systems execute across devices, computers, and machine surfaces through one control layer.',
+    items: ['Device actions', 'Task orchestration', 'Autonomous execution'],
+  },
+  {
+    title: 'Feedback',
+    description: 'Results are tracked, surfaced to operators, and used to improve future runs.',
+    items: ['Status visibility', 'Operational review', 'Continuous optimization'],
+  },
+]
+
+const droneInfrastructureSections = [
+  {
+    title: 'Mission automation',
+    description: 'Build repeatable flight operations on top of existing autopilot systems instead of replacing them.',
+    items: ['Mission planning', 'Repeatable execution', 'Operator oversight'],
+  },
+  {
+    title: 'Fleet coordination',
+    description: 'Coordinate multiple vehicles and connected systems through a shared operator model.',
+    items: ['Multi-drone workflows', 'Shared tasking', 'Operational continuity'],
+  },
+  {
+    title: 'Real-time decision making',
+    description: 'Keep machine actions grounded in live context instead of static one-off scripts.',
+    items: ['Adaptive execution', 'State-aware logic', 'Operational feedback loops'],
+  },
+]
+
+const approachExamples = [
+  'Scan this site every morning',
+  'Monitor for anomalies and alert me',
+  'Run system checks and report issues',
+]
+
+const buildUseCases = [
+  'Autonomous drone patrol systems',
+  'Infrastructure inspection workflows',
+  'Computer automation pipelines',
+  'Multi-device orchestration',
+]
+
+const builderPoints = [
+  'Open source core',
+  'Modular architecture',
+  'API-first design',
+]
+
+const communityPoints = [
+  'Transparent',
+  'Extensible',
+  'Owned by builders',
 ]
 
 const commandSurfaces = [
@@ -1047,10 +1111,9 @@ function SiteFooter() {
   return (
     <footer className="site-footer" aria-label="XMAXX social links">
       <div className="site-footer__copy">
-        <p className="eyebrow">Direct Links</p>
+        <p className="eyebrow">XMAXX</p>
         <p>
-          Track the public build path, release flow, and live updates from the XMAXX
-          account surface.
+          XMAXX - Control at Scale
         </p>
       </div>
 
@@ -1074,15 +1137,17 @@ function HomePage({
     <>
       <section className="hero-panel" id="overview">
         <div className="hero-copy">
-          <p className="eyebrow">Open-source project</p>
-          <h1>XMAXX is an open-source project building voice-first computing in public.</h1>
+          <p className="eyebrow">Open source control layer</p>
+          <h1>Control Machines. Not Interfaces.</h1>
           <p className="hero-copy__lede">
-            The repo, infrastructure, backend, deployment path, and current app surface
-            are all being built in the open. XMAXX is meant to be inspectable, forkable,
-            and clear about what exists now versus what is still being developed.
+            Open source platform for operating drones, computers, and autonomous systems
+            through intelligent agents.
+          </p>
+          <p className="hero-copy__support">
+            From flight missions to system automation, XMAXX turns commands into execution.
           </p>
 
-          <div className="verb-strip" aria-label="Current macOS app capabilities">
+          <div className="verb-strip" aria-label="XMAXX control scope">
             {commandTargets.map((target) => (
               <span key={target}>{target}</span>
             ))}
@@ -1091,25 +1156,19 @@ function HomePage({
           <div className="hero-actions">
             <a
               className="button button--solid"
-              href="/computer"
-            >
-              Open XMAXX Computer
-            </a>
-            <a
-              className="button button--ghost"
               href="https://github.com/xmaxxai"
               target="_blank"
               rel="noreferrer"
             >
-              View GitHub
+              View on GitHub
+            </a>
+            <a
+              className="button button--ghost"
+              href="/computer"
+            >
+              Run a Demo
             </a>
           </div>
-
-          <p className="hero-copy__support">
-            The current public build already ships real runtime pieces: live
-            transcription, explicit decision scaffolds, OCR targeting, native mouse
-            actions, spoken replies, and a deployment path that is visible end to end.
-          </p>
 
           <div className="hero-stats">
             {homeHeroStats.map(({ label, value, detail }) => (
@@ -1127,8 +1186,8 @@ function HomePage({
 
           <div className="hero-visual__meta">
             <div>
-              <p className="section-kicker">Built In Public</p>
-              <h2>The first page should explain the project clearly before it sells the product.</h2>
+              <p className="section-kicker">Built for Operators</p>
+              <h2>Input to agent to execution to feedback, without hiding the control path.</h2>
             </div>
 
             <div className="hardware-highlights">
@@ -1140,33 +1199,33 @@ function HomePage({
         </div>
       </section>
 
-      <section className="positioning-band" id="about">
+      <section className="positioning-band" id="what-is-xmaxx">
         <div>
-          <p className="eyebrow">About XMAXX</p>
-          <h2>XMAXX is a product company being built in the open.</h2>
+          <p className="eyebrow">One Control Layer for Everything</p>
+          <h2>XMAXX standardizes how machines are operated.</h2>
         </div>
 
         <div className="positioning-band__copy">
           <p>
-            The current public surface is not just a landing page. It is a working
-            product stack with a web app, a backend, deployment infrastructure, and
-            a macOS control surface moving toward a broader XMAXX computer platform.
+            XMAXX is an open source project that standardizes how machines are
+            operated. Instead of writing custom scripts for every system, it provides
+            a unified way to control drones, automate computers, and orchestrate
+            autonomous tasks.
           </p>
           <p>
-            The open-source posture matters because the product direction is technical
-            by design. People should be able to see how it is built, fork the stack,
-            and understand what is real today versus what is still on the roadmap.
+            The point is to move from interface-by-interface control to one operator
+            model that can be extended, inspected, and deployed in the open.
           </p>
         </div>
       </section>
 
-      <section className="section-block" id="open-source">
+      <section className="section-block">
         <div className="section-heading">
-          <p className="eyebrow">Open Source</p>
-          <h2>XMAXX should read as an open-source project, not a closed black box.</h2>
+          <p className="eyebrow">What XMAXX Is</p>
+          <h2>One system for control, automation, and machine orchestration.</h2>
           <p>
-            The public repo is part of the product story: source, infra, deployment,
-            and runtime behavior are all visible and meant to be built on.
+            XMAXX is meant to stay simple and grounded: one open control layer for
+            different classes of machines.
           </p>
         </div>
 
@@ -1177,73 +1236,154 @@ function HomePage({
         </div>
       </section>
 
-      <section className="section-block" id="runtime">
+      <section className="section-block" id="how-it-works">
         <div className="section-heading">
-          <p className="eyebrow">Runtime</p>
-          <h2>What XMAXX Computer already does in the current build.</h2>
+          <p className="eyebrow">Built for Operators</p>
+          <h2>Input to Agent to Execution to Feedback</h2>
           <p>
-            The current app is still early, but its runtime is concrete. These are the
-            parts that already exist in the shipped desktop surface.
+            You define intent, the XMAXX agent interprets it, systems execute across
+            devices, and the results are tracked and optimized.
           </p>
         </div>
 
         <div className="spec-grid">
-          {commandSurfaces.map((section) => (
+          {operatorFlowSections.map((section) => (
             <SpecCard key={section.title} {...section} />
           ))}
         </div>
       </section>
 
-      <section className="section-block">
+      <section className="section-block" id="open-source-drone">
         <div className="section-heading">
-          <p className="eyebrow">Platform Stack</p>
-          <h2>The product is backed by a visible runtime stack, not just interface copy.</h2>
-        </div>
-
-        <div className="spec-grid">
-          {stackSections.map((section) => (
-            <SpecCard key={section.title} {...section} />
-          ))}
-        </div>
-      </section>
-
-      <section className="section-block">
-        <div className="section-heading">
-          <p className="eyebrow">Operator Access</p>
-          <h2>The authenticated web surface still exists, but the public story now starts with the product and the repo.</h2>
+          <p className="eyebrow">Open Source Drone Infrastructure</p>
+          <h2>Built on top of existing systems like PX4 and ArduPilot.</h2>
           <p>
-            Sign in when you want profile and API surfaces. The home page stays focused on
-            XMAXX Computer, the open-source build path, and the runtime that already ships.
+            XMAXX includes an open drone control framework focused on mission
+            automation, fleet coordination, and real-time decision making.
           </p>
         </div>
 
-        <AccessPanel
-          authState={authState}
-          notice={authNotice}
-          onOpenLogin={onOpenLogin}
-          onLogout={onLogout}
-          busyProvider={authBusyProvider}
-        />
-      </section>
-
-      <section className="closing-panel">
-        <p className="eyebrow">Product Page</p>
-        <h2>XMAXX Computer now has its own product surface.</h2>
-        <p>
-          The homepage should explain the project clearly. The deeper product view covers
-          XMAXX Computer as the dedicated surface for the current runtime and the broader
-          hardware direction around it.
-        </p>
+        <div className="spec-grid">
+          {droneInfrastructureSections.map((section) => (
+            <SpecCard key={section.title} {...section} />
+          ))}
+        </div>
 
         <div className="hardware-highlights">
-          {coreUnitHighlights.map((item) => (
+          <span>Works with existing drones</span>
+          <span>Extensible via APIs</span>
+          <span>Designed for continuous operations</span>
+        </div>
+      </section>
+
+      <section className="section-block">
+        <div className="section-heading">
+          <p className="eyebrow">From Control to Intelligence</p>
+          <h2>XMAXX shifts control from manual operation to intelligent execution.</h2>
+          <p>
+            Most systems still expect humans to click interfaces and manage devices.
+            XMAXX changes the model: you define outcomes, and the system executes.
+          </p>
+        </div>
+
+        <div className="spec-grid">
+          <SpecCard
+            title="Define outcomes"
+            description="Describe what should happen instead of driving every individual interface step."
+            items={['No interface hopping', 'No one-off device babysitting', 'Operator-defined intent']}
+          />
+          <SpecCard
+            title="Execution examples"
+            description="Simple requests can become repeatable machine operations."
+            items={approachExamples}
+          />
+        </div>
+      </section>
+
+      <section className="section-block">
+        <div className="section-heading">
+          <p className="eyebrow">What You Can Build</p>
+          <h2>Use cases that stay grounded in real operations.</h2>
+        </div>
+
+        <div className="hardware-highlights">
+          {buildUseCases.map((item) => (
+            <span key={item}>{item}</span>
+          ))}
+        </div>
+      </section>
+
+      <section className="section-block" id="builders">
+        <div className="section-heading">
+          <p className="eyebrow">Built for Developers and Operators</p>
+          <h2>Control without unnecessary complexity.</h2>
+          <p>
+            XMAXX is designed for builders who want an open system they can inspect,
+            extend, and deploy into real operations.
+          </p>
+        </div>
+
+        <div className="spec-grid">
+          <SpecCard
+            title="For builders"
+            description="The core system is structured so teams can adapt it rather than work around it."
+            items={builderPoints}
+          />
+          <SpecCard
+            title="Start building"
+            description="The repo is the starting point for extending the control layer, integrations, and deployment path."
+            items={['View the source', 'Fork the stack', 'Build on the API surface']}
+          />
+        </div>
+      </section>
+
+      <section className="section-block">
+        <div className="section-heading">
+          <p className="eyebrow">Open Source. Built in Public.</p>
+          <h2>XMAXX is an open project.</h2>
+          <p>
+            Control systems should be transparent, extensible, and owned by builders,
+            not hidden behind closed interfaces.
+          </p>
+        </div>
+
+        <div className="hardware-highlights">
+          {communityPoints.map((item) => (
             <span key={item}>{item}</span>
           ))}
         </div>
 
         <div className="hero-actions">
+          <a
+            className="button button--solid"
+            href="https://github.com/xmaxxai"
+            target="_blank"
+            rel="noreferrer"
+          >
+            GitHub repo
+          </a>
+          <a
+            className="button button--ghost"
+            href="https://x.com/xmaxxai"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Community
+          </a>
+        </div>
+      </section>
+
+      <section className="closing-panel">
+        <p className="eyebrow">Product Page</p>
+        <h2>XMAXX Computer remains the current product surface.</h2>
+        <p>
+          The homepage now explains the open source project first. The product page is
+          where the current XMAXX Computer runtime and hardware direction live in more detail.
+        </p>
+
+        <div className="hero-actions">
           <a className="button button--solid" href="/computer">
-            Open XMAXX Computer page
+            Open XMAXX Computer
           </a>
           <a
             className="button button--ghost"
@@ -1251,7 +1391,7 @@ function HomePage({
             target="_blank"
             rel="noreferrer"
           >
-            Track the repo
+            View GitHub
           </a>
         </div>
       </section>
