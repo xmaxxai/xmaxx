@@ -6,6 +6,11 @@
 
 XMAXX is the codebase for the initial XMAXX platform footprint: AWS infrastructure, a K3s cluster, an app delivery path built around Docker and Helm, and the `xmaxx.ai` home experience built in React.
 
+Public links:
+
+- Website: `https://xmaxx.ai`
+- X: `https://x.com/xmaxxai` (`@xmaxxai`)
+
 The repo is intentionally managed as code first:
 
 - Infrastructure is described in Terraform.
