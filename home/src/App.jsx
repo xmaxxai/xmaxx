@@ -1308,8 +1308,8 @@ function HomePage({
           <p className="eyebrow">Who It Is For</p>
           <h2>MAXX is for teams that need systems to run with less manual intervention.</h2>
           <p>
-            The audience is straightforward: operators, infrastructure teams, and builders
-            who want more automation and less interface work.
+            MAXX is built for operators, infrastructure teams, and builders who need
+            more automation and less manual control work.
           </p>
         </div>
 
