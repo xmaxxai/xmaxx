@@ -219,6 +219,24 @@ const offerSections = [
   },
 ]
 
+const heroSurfaceNotes = [
+  {
+    label: 'Core',
+    title: 'Automation first',
+    detail: 'MAXX is built to move routine work out of manual control and into repeatable execution.',
+  },
+  {
+    label: 'Scope',
+    title: 'Software to machines',
+    detail: 'The same project surface should cover software tasks, computers, devices, and machine operations.',
+  },
+  {
+    label: 'Project',
+    title: 'Open by default',
+    detail: 'The code, delivery path, and current product direction stay visible in public.',
+  },
+]
+
 const commandSurfaces = [
   {
     title: 'Live Voice Loop',
@@ -1237,6 +1255,23 @@ function HomePage({
                 <span>{detail}</span>
               </article>
             ))}
+          </div>
+
+          <div className="hero-copy__panel">
+            <div className="hero-copy__panel-head">
+              <p className="section-kicker">Project Focus</p>
+              <h2>Open automation core for software, computers, and machines.</h2>
+            </div>
+
+            <div className="hero-copy__panel-grid">
+              {heroSurfaceNotes.map(({ label, title, detail }) => (
+                <article className="hero-copy__panel-note" key={title}>
+                  <span>{label}</span>
+                  <strong>{title}</strong>
+                  <p>{detail}</p>
+                </article>
+              ))}
+            </div>
           </div>
         </div>
 
