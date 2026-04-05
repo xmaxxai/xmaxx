@@ -3,18 +3,18 @@ import { ApiTokensPage, ProfilePage } from './components/ProfileWorkspace'
 import './index.css'
 
 const homeNavLinks = [
-  { href: '#manifesto', label: 'Manifesto', page: 'home' },
-  { href: '#surfaces', label: 'Surfaces', page: 'home' },
-  { href: '#stack', label: 'Runtime', page: 'home' },
-  { href: '/core-unit', label: 'Voice Node', page: 'core-unit' },
+  { href: '#about', label: 'About', page: 'home' },
+  { href: '#open-source', label: 'Open Source', page: 'home' },
+  { href: '#runtime', label: 'Runtime', page: 'home' },
+  { href: '/computer', label: 'XMAXX Computer', page: 'computer' },
 ]
 
-const coreUnitNavLinks = [
-  { href: '/', label: 'Voice OS', page: 'home' },
-  { href: '#product-overview', label: 'Overview', page: 'core-unit' },
-  { href: '#specs', label: 'Specs', page: 'core-unit' },
-  { href: '#modes', label: 'Deploy', page: 'core-unit' },
-  { href: '#security', label: 'Security', page: 'core-unit' },
+const computerNavLinks = [
+  { href: '/', label: 'Home', page: 'home' },
+  { href: '#product-overview', label: 'Overview', page: 'computer' },
+  { href: '#specs', label: 'Specs', page: 'computer' },
+  { href: '#modes', label: 'Deploy', page: 'computer' },
+  { href: '#security', label: 'Security', page: 'computer' },
 ]
 
 const accountNavLinks = [
@@ -38,6 +38,24 @@ const socialLinks = [
     icon: 'x-icon',
     viewBox: '0 0 19 19',
     detail: 'Signals, drops, and live updates',
+  },
+]
+
+const openSourcePoints = [
+  {
+    title: 'Public codebase',
+    description:
+      'The stack is being built in public: infrastructure, frontend, backend, deployment path, and release wiring all live in the repo.',
+  },
+  {
+    title: 'Forkable runtime',
+    description:
+      'XMAXX is meant to be extended. Builders should be able to inspect how it works, adapt it, and ship their own versions.',
+  },
+  {
+    title: 'Real deployment path',
+    description:
+      'Open source here means more than source visibility. The app, registry, Terraform, and cluster delivery path are all part of the same public system.',
   },
 ]
 
@@ -486,8 +504,8 @@ function getCurrentPage() {
 
   const pathname = window.location.pathname.replace(/\/+$/, '') || '/'
 
-  if (pathname === '/core-unit') {
-    return 'core-unit'
+  if (pathname === '/computer' || pathname === '/core-unit') {
+    return 'computer'
   }
 
   if (pathname === '/profile') {
@@ -506,13 +524,13 @@ function getSiteNavLinks(currentPage) {
     return [...homeNavLinks, ...accountNavLinks]
   }
 
-  if (currentPage === 'core-unit') {
-    return [...coreUnitNavLinks, ...accountNavLinks]
+  if (currentPage === 'computer') {
+    return [...computerNavLinks, ...accountNavLinks]
   }
 
   return [
-    { href: '/', label: 'Voice OS', page: 'home' },
-    { href: '/core-unit', label: 'Voice Node', page: 'core-unit' },
+    { href: '/', label: 'Home', page: 'home' },
+    { href: '/computer', label: 'XMAXX Computer', page: 'computer' },
     ...accountNavLinks,
   ]
 }
@@ -1056,12 +1074,12 @@ function HomePage({
     <>
       <section className="hero-panel" id="overview">
         <div className="hero-copy">
-          <p className="eyebrow">Voice-guided macOS copilot</p>
-          <h1>Control your Mac with voice commands.</h1>
+          <p className="eyebrow">Open-source voice computing project</p>
+          <h1>XMAXX is building an open voice-first computer stack.</h1>
           <p className="hero-copy__lede">
-            XMAXX Computer is a macOS dashboard that keeps a live voice loop open,
-            folds each paused utterance into a guided decision cycle, and can already
-            plan or execute screen-grounded actions.
+            The current public build starts with XMAXX Computer: a macOS product that
+            keeps a live voice loop open, turns spoken intent into structured action,
+            and exposes the stack in public so others can inspect, extend, and ship it.
           </p>
 
           <div className="verb-strip" aria-label="Current macOS app capabilities">
@@ -1073,21 +1091,24 @@ function HomePage({
           <div className="hero-actions">
             <a
               className="button button--solid"
+              href="/computer"
+            >
+              Open XMAXX Computer
+            </a>
+            <a
+              className="button button--ghost"
               href="https://github.com/xmaxxai"
               target="_blank"
               rel="noreferrer"
             >
               View GitHub
             </a>
-            <a className="button button--ghost" href="/core-unit">
-              See Voice Node
-            </a>
           </div>
 
           <p className="hero-copy__support">
-            The current build combines live transcription, decision-model switching,
-            screenshot OCR, native mouse events, spoken replies, and operator approval
-            prompts in one inspectable loop.
+            Today the shipped stack combines live transcription, decision scaffolds,
+            screenshot OCR, native mouse events, spoken replies, and approval-gated
+            actions in one inspectable product surface.
           </p>
 
           <div className="hero-stats">
@@ -1106,8 +1127,8 @@ function HomePage({
 
           <div className="hero-visual__meta">
             <div>
-              <p className="section-kicker">Current runtime</p>
-              <h2>Speak once. XMAXX can hear, plan, ask, click, and answer back.</h2>
+              <p className="section-kicker">Current product</p>
+              <h2>One spoken command can move from capture to visible action.</h2>
             </div>
 
             <div className="hardware-highlights">
@@ -1119,31 +1140,51 @@ function HomePage({
         </div>
       </section>
 
-      <section className="positioning-band" id="manifesto">
+      <section className="positioning-band" id="about">
         <div>
-          <p className="eyebrow">Manifesto</p>
-          <h2>A voice loop for your computer, not just dictation.</h2>
+          <p className="eyebrow">About XMAXX</p>
+          <h2>XMAXX is a product company being built in the open.</h2>
         </div>
 
         <div className="positioning-band__copy">
           <p>
-            The macOS app is already built around a concrete loop: mission, environment,
-            operator feedback, a chosen decision model, an action queue, and a voice
-            channel that keeps steering the plan while it runs.
+            The current public surface is not just a landing page. It is a working
+            product stack with a web app, a backend, deployment infrastructure, and
+            a macOS control surface moving toward a broader XMAXX computer platform.
           </p>
           <p>
-            It is not pretending to be a magical universal computer controller yet.
-            Today it can transcribe speech, reason through explicit stages, resolve text
-            on screen into coordinates, fire native mouse events, ask for approval, and
-            speak its replies back to the operator.
+            The open-source posture matters because the product direction is technical
+            by design. People should be able to see how it is built, fork the stack,
+            and understand what is real today versus what is still on the roadmap.
           </p>
         </div>
       </section>
 
-      <section className="section-block" id="surfaces">
+      <section className="section-block" id="open-source">
         <div className="section-heading">
-          <p className="eyebrow">macOS Capabilities</p>
-          <h2>What the current desktop app can already do.</h2>
+          <p className="eyebrow">Open Source</p>
+          <h2>XMAXX should read as an open-source project, not a closed black box.</h2>
+          <p>
+            The public repo is part of the product story: source, infra, deployment,
+            and runtime behavior are all visible and meant to be built on.
+          </p>
+        </div>
+
+        <div className="spec-grid">
+          {openSourcePoints.map((section) => (
+            <SpecCard key={section.title} {...section} />
+          ))}
+        </div>
+      </section>
+
+      <section className="section-block" id="runtime">
+        <div className="section-heading">
+          <p className="eyebrow">Runtime</p>
+          <h2>What XMAXX Computer already does in the current build.</h2>
+          <p>
+            The current app is still early, but its runtime is concrete. These are the
+            parts that already exist in the shipped desktop surface.
+          </p>
         </div>
 
         <div className="spec-grid">
@@ -1153,10 +1194,10 @@ function HomePage({
         </div>
       </section>
 
-      <section className="section-block" id="stack">
+      <section className="section-block">
         <div className="section-heading">
-          <p className="eyebrow">Runtime</p>
-          <h2>What the current macOS build actually contains.</h2>
+          <p className="eyebrow">Platform Stack</p>
+          <h2>The product is backed by a visible runtime stack, not just interface copy.</h2>
         </div>
 
         <div className="spec-grid">
@@ -1169,10 +1210,10 @@ function HomePage({
       <section className="section-block">
         <div className="section-heading">
           <p className="eyebrow">Operator Access</p>
-          <h2>The authenticated web surface still exists, but the product story starts with the Mac app.</h2>
+          <h2>The authenticated web surface still exists, but the public story now starts with the product and the repo.</h2>
           <p>
-            Sign in when you want profile and API surfaces. The homepage now stays focused
-            on the actual macOS runtime and the voice-guided loop it already ships.
+            Sign in when you want profile and API surfaces. The home page stays focused on
+            XMAXX Computer, the open-source build path, and the runtime that already ships.
           </p>
         </div>
 
@@ -1186,12 +1227,12 @@ function HomePage({
       </section>
 
       <section className="closing-panel">
-        <p className="eyebrow">Voice Node Direction</p>
-        <h2>The Core Unit is the hardware direction for keeping this loop always on.</h2>
+        <p className="eyebrow">Product Page</p>
+        <h2>XMAXX Computer now has its own product surface.</h2>
         <p>
-          The current shipped software surface is the macOS app. Core Unit is the companion
-          hardware direction around that same loop: persistent voice capture, local routing,
-          and a quieter deployment surface outside the laptop itself.
+          The homepage should explain the project clearly. The deeper product view covers
+          XMAXX Computer as the dedicated surface for the current runtime and the broader
+          hardware direction around it.
         </p>
 
         <div className="hardware-highlights">
@@ -1201,8 +1242,8 @@ function HomePage({
         </div>
 
         <div className="hero-actions">
-          <a className="button button--solid" href="/core-unit">
-            Open Voice Node page
+          <a className="button button--solid" href="/computer">
+            Open XMAXX Computer page
           </a>
           <a
             className="button button--ghost"
@@ -1225,12 +1266,12 @@ function CoreUnitPage() {
     <>
       <section className="hero-panel" id="product-overview">
         <div className="hero-copy">
-          <p className="eyebrow">Hardware direction</p>
-          <h1>XMAXX Core Unit is the companion voice node.</h1>
+          <p className="eyebrow">Product Page</p>
+          <h1>XMAXX Computer is the current product surface.</h1>
           <p className="hero-copy__lede">
-            The current shipped software surface is the macOS app. Core Unit is the hardware
-            direction around the same guided loop: always-on listening, local routing, and
-            a dedicated runtime that does not have to live inside the laptop.
+            XMAXX Computer is the current product expression of the XMAXX runtime: a
+            voice-first control surface for the desktop, built in public, with a hardware
+            direction behind it for always-on local operation.
           </p>
 
           <div className="verb-strip" aria-label="Core unit posture">
@@ -1241,7 +1282,7 @@ function CoreUnitPage() {
 
           <div className="hero-actions">
             <a className="button button--solid" href="/">
-              Back to Voice OS
+              Back to Home
             </a>
             <a
               className="button button--ghost"
@@ -1275,7 +1316,7 @@ function CoreUnitPage() {
           <div className="hero-visual__meta">
             <div>
               <p className="section-kicker">Runtime Envelope</p>
-              <h2>Local speech pipeline, fanless compute, and a physical home for the loop.</h2>
+              <h2>Local speech pipeline, desktop control, and a physical direction behind the product.</h2>
             </div>
 
             <div className="hardware-highlights">
@@ -1291,13 +1332,14 @@ function CoreUnitPage() {
         <p className="eyebrow">Positioning</p>
         <div className="positioning-band__copy">
           <p>
-            The macOS app already proves the core interaction model: continuous voice capture,
-            explicit decision stages, OCR-based screen targeting, native mouse execution, and
-            approval-gated actions. Core Unit is about turning that loop into dedicated hardware.
+            XMAXX Computer proves the interaction model now: continuous voice capture,
+            explicit decision stages, OCR-based screen targeting, native mouse execution,
+            and approval-gated actions in a real desktop product.
           </p>
           <p>
-            Instead of keeping the runtime tied to a single desktop session, the node creates
-            a persistent local surface for the same voice-guided computer control stack.
+            The hardware track extends that same system into a persistent local node, but
+            the product page should start with what exists today and how the open-source
+            project is evolving outward from there.
           </p>
         </div>
       </section>
@@ -1333,12 +1375,12 @@ function CoreUnitPage() {
       </section>
 
       <section className="closing-panel">
-        <p className="eyebrow">Operating Statement</p>
-        <h2>Voice-guided computer control, delivered as hardware.</h2>
+        <p className="eyebrow">Open Project</p>
+        <h2>XMAXX Computer is part product page, part open build log.</h2>
         <p>
-          XMAXX Core Unit is meant to stay on, stay quiet, and host the same guided loop that
-          already exists on macOS, with more room for persistent capture, local routing, and
-          always-available control surfaces.
+          The intent is to keep shipping the product in public: app behavior, backend, infra,
+          registry, and hardware direction all visible enough for operators and builders to
+          understand what XMAXX already is and what comes next.
         </p>
       </section>
 
@@ -1477,7 +1519,7 @@ function App() {
         <a className="brand" href={currentPage === 'home' ? '#overview' : '/'} aria-label="XMAXX home">
           <span className="brand__mark">XMAXX</span>
           <span className="brand__sub">
-            {currentPage === 'core-unit' ? 'Voice Node' : 'xmaxx Computer'}
+            {currentPage === 'computer' ? 'XMAXX Computer' : 'Open Voice Computing'}
           </span>
         </a>
 
@@ -1509,7 +1551,7 @@ function App() {
           <ProfilePage authState={authState} onOpenLogin={handleOpenLogin} />
         ) : currentPage === 'access-tokens' ? (
           <ApiTokensPage authState={authState} onOpenLogin={handleOpenLogin} />
-        ) : currentPage === 'core-unit' ? (
+        ) : currentPage === 'computer' ? (
           <CoreUnitPage />
         ) : (
           <HomePage
