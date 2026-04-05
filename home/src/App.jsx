@@ -1196,14 +1196,14 @@ function HomePage({
     <>
       <section className="hero-panel" id="overview">
         <div className="hero-copy">
-          <p className="eyebrow">Open source automation project</p>
-          <h1>Automate Everything Practical.</h1>
+          <p className="eyebrow">MAXX open source project</p>
+          <h1>Automate Everything.</h1>
           <p className="hero-copy__lede">
-            XMAXX is an open source project focused on one thing: automating work across software,
+            MAXX is an open source project focused on one thing: automating work across software,
             computers, and machines from a single control layer.
           </p>
           <p className="hero-copy__support">
-            The main page should make that clear. XMAXX is formal where it needs to be:
+            The main page should make that clear. MAXX is formal where it needs to be:
             practical automation, visible execution, and an open product surface.
           </p>
 
@@ -1262,7 +1262,7 @@ function HomePage({
       <section className="positioning-band" id="platform">
         <div>
           <p className="eyebrow">Project Summary</p>
-          <h2>XMAXX is an open source automation project.</h2>
+          <h2>MAXX is an open source automation project.</h2>
         </div>
 
         <div className="positioning-band__copy">
@@ -1280,7 +1280,7 @@ function HomePage({
       <section className="section-block" id="customers">
         <div className="section-heading">
           <p className="eyebrow">Who It Is For</p>
-          <h2>XMAXX is for teams that need systems to run with less manual intervention.</h2>
+          <h2>MAXX is for teams that need systems to run with less manual intervention.</h2>
           <p>
             The audience is straightforward: operators, infrastructure teams, and builders
             who want more automation and less interface work.
@@ -1303,7 +1303,7 @@ function HomePage({
           <p className="eyebrow">Core Product</p>
           <h2>The core product is automation.</h2>
           <p>
-            XMAXX is built around an open automation core, a formal product surface through
+            MAXX is built around an open automation core, a formal product surface through
             XMAXX Computer, and a deployment path that stays visible.
           </p>
         </div>
@@ -1378,7 +1378,7 @@ function HomePage({
           <p className="eyebrow">Open Source</p>
           <h2>The project is open, and the product direction stays visible.</h2>
           <p>
-            XMAXX is being built in public. The code is open, the deployment path is visible,
+            MAXX is being built in public. The code is open, the deployment path is visible,
             and the product surface is not hidden behind vague language.
           </p>
         </div>
