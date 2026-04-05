@@ -72,6 +72,26 @@ spec:
                 secretKeyRef:
                   name: {{ include "home-backend.fullname" . }}
                   key: GOOGLE_OAUTH_CLIENT_SECRET
+            - name: STRIPE_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "home-backend.fullname" . }}
+                  key: STRIPE_SECRET_KEY
+            - name: STRIPE_WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "home-backend.fullname" . }}
+                  key: STRIPE_WEBHOOK_SECRET
+            - name: STRIPE_PRICE_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "home-backend.fullname" . }}
+                  key: STRIPE_PRICE_ID
+            - name: XMAXX_SALES_NOTIFY_DISCORD_WEBHOOK_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "home-backend.fullname" . }}
+                  key: XMAXX_SALES_NOTIFY_DISCORD_WEBHOOK_URL
             - name: POSTGRES_HOST
               value: {{ .Values.env.postgresHost | quote }}
             - name: POSTGRES_PORT
@@ -94,6 +114,14 @@ spec:
               value: {{ .Values.env.googleOauthRedirectUri | quote }}
             - name: GOOGLE_OAUTH_SCOPES
               value: {{ .Values.env.googleOauthScopes | quote }}
+            - name: STRIPE_SUCCESS_URL
+              value: {{ .Values.env.stripeSuccessUrl | quote }}
+            - name: STRIPE_CANCEL_URL
+              value: {{ .Values.env.stripeCancelUrl | quote }}
+            - name: XMAXX_BILLING_MODE
+              value: {{ .Values.env.xmaxxBillingMode | quote }}
+            - name: XMAXX_SALES_NOTIFY_EMAIL
+              value: {{ .Values.env.xmaxxSalesNotifyEmail | quote }}
             - name: RUN_MIGRATIONS_ON_STARTUP
               value: {{ .Values.env.runMigrationsOnStartup | quote }}
             - name: DATABASE_STARTUP_MAX_ATTEMPTS

@@ -137,3 +137,15 @@ GOOGLE_OAUTH_SCOPES = env_list("GOOGLE_OAUTH_SCOPES", "openid,email,profile")
 GOOGLE_OAUTH_AUTHORIZE_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_OAUTH_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GOOGLE_API_USERINFO_URL = "https://openidconnect.googleapis.com/v1/userinfo"
+
+STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "").strip()
+STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "").strip()
+STRIPE_PRICE_ID = os.getenv("STRIPE_PRICE_ID", "").strip()
+STRIPE_SUCCESS_URL = os.getenv("STRIPE_SUCCESS_URL", "").strip()
+STRIPE_CANCEL_URL = os.getenv("STRIPE_CANCEL_URL", "").strip()
+
+XMAXX_BILLING_MODE = os.getenv("XMAXX_BILLING_MODE", "one_time").strip()
+XMAXX_SALES_NOTIFY_EMAIL = os.getenv("XMAXX_SALES_NOTIFY_EMAIL", "").strip()
+XMAXX_SALES_NOTIFY_DISCORD_WEBHOOK_URL = os.getenv(
+    "XMAXX_SALES_NOTIFY_DISCORD_WEBHOOK_URL", ""
+).strip()
