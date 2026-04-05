@@ -599,6 +599,13 @@ function getSiteNavLinks(currentPage) {
   ]
 }
 
+function splitNavLinks(links) {
+  return {
+    sectionLinks: links.filter(({ href }) => href.startsWith('#')),
+    routeLinks: links.filter(({ href }) => !href.startsWith('#')),
+  }
+}
+
 function buildAuthReturnPath() {
   if (typeof window === 'undefined') {
     return '/'
@@ -1063,6 +1070,39 @@ function SocialLink({ href, label, handle, icon, viewBox, detail }) {
         <small>{detail}</small>
       </span>
     </a>
+  )
+}
+
+function NavDropdown({ links, label = 'Sections' }) {
+  if (links.length === 0) {
+    return null
+  }
+
+  return (
+    <label className="nav-select">
+      <span className="nav-select__label">{label}</span>
+      <select
+        defaultValue=""
+        aria-label={label}
+        onChange={(event) => {
+          const { value } = event.target
+
+          if (!value) {
+            return
+          }
+
+          window.location.assign(value)
+          event.target.value = ''
+        }}
+      >
+        <option value="">Open menu</option>
+        {links.map(({ href, label: itemLabel }) => (
+          <option key={href} value={href}>
+            {itemLabel}
+          </option>
+        ))}
+      </select>
+    </label>
   )
 }
 
@@ -1532,6 +1572,7 @@ function CoreUnitPage() {
 function App() {
   const currentPage = getCurrentPage()
   const siteNavLinks = getSiteNavLinks(currentPage)
+  const { sectionLinks, routeLinks } = splitNavLinks(siteNavLinks)
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false)
   const [authNotice, setAuthNotice] = useState(() => readAuthNotice())
   const [authState, setAuthState] = useState(buildInitialAuthState)
@@ -1664,7 +1705,12 @@ function App() {
         </a>
 
         <nav className="site-nav" aria-label="Page sections">
-          {siteNavLinks.map(({ href, label, page }) => (
+          <NavDropdown
+            links={sectionLinks}
+            label={currentPage === 'computer' ? 'Product menu' : 'Explore'}
+          />
+
+          {routeLinks.map(({ href, label, page }) => (
             <a
               key={href}
               href={href}
