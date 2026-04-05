@@ -8,8 +8,8 @@ XMAXX is the codebase for the initial XMAXX platform footprint: AWS infrastructu
 
 Public links:
 
-- Website: `https://xmaxx.ai`
-- X: `https://x.com/xmaxxai` (`@xmaxxai`)
+- Website: [https://xmaxx.ai](https://xmaxx.ai)
+- X: [https://x.com/xmaxxai](https://x.com/xmaxxai) (`@xmaxxai`)
 
 The repo is intentionally managed as code first:
 
