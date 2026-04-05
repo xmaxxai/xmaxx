@@ -3,10 +3,8 @@ import { ApiTokensPage, ProfilePage } from './components/ProfileWorkspace'
 import './index.css'
 
 const homeNavLinks = [
-  { href: '#what-is-xmaxx', label: 'What It Is', page: 'home' },
-  { href: '#how-it-works', label: 'How It Works', page: 'home' },
-  { href: '#open-source-drone', label: 'Drone Stack', page: 'home' },
-  { href: '#builders', label: 'Builders', page: 'home' },
+  { href: '#customers', label: 'Customers', page: 'home' },
+  { href: '#offer', label: 'Offer', page: 'home' },
   { href: '/computer', label: 'XMAXX Computer', page: 'computer' },
 ]
 
@@ -214,6 +212,36 @@ const supportOptions = [
   {
     title: 'Builder collaboration',
     description: 'Use the public repo, issues, and community channels to shape the control layer in public.',
+  },
+]
+
+const customerSections = [
+  {
+    title: 'Drone operators',
+    description: 'Teams running inspections, patrols, and field operations that need mission automation instead of more manual control surfaces.',
+  },
+  {
+    title: 'Infrastructure teams',
+    description: 'Operators managing repeatable checks, monitoring flows, and anomaly response across machine-heavy environments.',
+  },
+  {
+    title: 'Software and robotics builders',
+    description: 'Developers who need an open control layer they can extend, integrate, and deploy into their own product stack.',
+  },
+]
+
+const offerSections = [
+  {
+    title: 'Open source control layer',
+    description: 'The core software that standardizes how machines are operated through intent, agents, and execution flows.',
+  },
+  {
+    title: 'XMAXX Computer',
+    description: 'The current product surface for the runtime, combining software, hardware direction, and a dedicated operator experience.',
+  },
+  {
+    title: 'Support and extension',
+    description: 'Help for teams that want to evaluate, deploy, or extend the open source stack in production environments.',
   },
 ]
 
@@ -620,13 +648,6 @@ function getSiteNavLinks(currentPage) {
     { href: '/computer', label: 'XMAXX Computer', page: 'computer' },
     ...accountNavLinks,
   ]
-}
-
-function splitNavLinks(links) {
-  return {
-    sectionLinks: links.filter(({ href }) => href.startsWith('#')),
-    routeLinks: links.filter(({ href }) => !href.startsWith('#')),
-  }
 }
 
 function buildAuthReturnPath() {
@@ -1096,39 +1117,6 @@ function SocialLink({ href, label, handle, icon, viewBox, detail }) {
   )
 }
 
-function NavDropdown({ links, label = 'Sections' }) {
-  if (links.length === 0) {
-    return null
-  }
-
-  return (
-    <label className="nav-select">
-      <span className="nav-select__label">{label}</span>
-      <select
-        defaultValue=""
-        aria-label={label}
-        onChange={(event) => {
-          const { value } = event.target
-
-          if (!value) {
-            return
-          }
-
-          window.location.assign(value)
-          event.target.value = ''
-        }}
-      >
-        <option value="">Open menu</option>
-        {links.map(({ href, label: itemLabel }) => (
-          <option key={href} value={href}>
-            {itemLabel}
-          </option>
-        ))}
-      </select>
-    </label>
-  )
-}
-
 function VoiceDeck() {
   return (
     <div className="hero-visual__frame hero-visual__frame--software">
@@ -1279,6 +1267,70 @@ function HomePage({
             The point is to move from interface-by-interface control to one operator
             model that can be extended, inspected, and deployed in the open.
           </p>
+        </div>
+      </section>
+
+      <section className="section-block" id="customers">
+        <div className="section-split">
+          <div className="section-heading">
+            <p className="eyebrow">Who It Is For</p>
+            <h2>XMAXX is for teams operating machines, not just browsing dashboards.</h2>
+            <p>
+              The customer is the operator, infrastructure team, or builder who needs a
+              reliable control layer across drones, computers, and autonomous systems.
+            </p>
+          </div>
+
+          <div className="section-aside">
+            <p className="section-kicker">Customer profile</p>
+            <h3>People running real systems.</h3>
+            <p>
+              The value is not another interface. It is faster execution, less manual
+              overhead, and a control model that can scale across machine types.
+            </p>
+          </div>
+        </div>
+
+        <div className="use-case-grid use-case-grid--triple">
+          {customerSections.map(({ title, description }) => (
+            <article className="use-case-card" key={title}>
+              <p className="section-kicker">Customer</p>
+              <h3>{title}</h3>
+              <p>{description}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="section-block" id="offer">
+        <div className="section-split">
+          <div className="section-heading">
+            <p className="eyebrow">What We Sell</p>
+            <h2>XMAXX sells control infrastructure, product surface, and support.</h2>
+            <p>
+              The offer spans the open source control layer, the XMAXX Computer product
+              surface, and support for teams adopting or extending the software.
+            </p>
+          </div>
+
+          <div className="section-aside section-aside--accent">
+            <p className="section-kicker">Commercial edge</p>
+            <h3>Open source core, product-grade execution.</h3>
+            <p>
+              XMAXX stays credible because the stack is visible, but the experience is
+              organized around deployable software, hardware direction, and operator value.
+            </p>
+          </div>
+        </div>
+
+        <div className="use-case-grid use-case-grid--triple">
+          {offerSections.map(({ title, description }) => (
+            <article className="use-case-card" key={title}>
+              <p className="section-kicker">Offer</p>
+              <h3>{title}</h3>
+              <p>{description}</p>
+            </article>
+          ))}
         </div>
       </section>
 
@@ -1625,7 +1677,7 @@ function CoreUnitPage() {
 function App() {
   const currentPage = getCurrentPage()
   const siteNavLinks = getSiteNavLinks(currentPage)
-  const { sectionLinks, routeLinks } = splitNavLinks(siteNavLinks)
+  const [isPageReady, setIsPageReady] = useState(false)
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false)
   const [authNotice, setAuthNotice] = useState(() => readAuthNotice())
   const [authState, setAuthState] = useState(buildInitialAuthState)
@@ -1644,6 +1696,16 @@ function App() {
       if (authPopupMonitorRef.current) {
         window.clearInterval(authPopupMonitorRef.current)
       }
+    }
+  }, [])
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      setIsPageReady(true)
+    })
+
+    return () => {
+      window.cancelAnimationFrame(frame)
     }
   }, [])
 
@@ -1745,7 +1807,7 @@ function App() {
   }
 
   return (
-    <div className="spec-page">
+    <div className={`spec-page${isPageReady ? ' spec-page--ready' : ''}`}>
       <div className="ambient ambient--left" />
       <div className="ambient ambient--right" />
 
@@ -1758,12 +1820,7 @@ function App() {
         </a>
 
         <nav className="site-nav" aria-label="Page sections">
-          <NavDropdown
-            links={sectionLinks}
-            label={currentPage === 'computer' ? 'Product menu' : 'Explore'}
-          />
-
-          {routeLinks.map(({ href, label, page }) => (
+          {siteNavLinks.map(({ href, label, page }) => (
             <a
               key={href}
               href={href}
