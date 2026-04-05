@@ -1,6 +1,6 @@
 # Home Backend
 
-`home-backend/` is the new Django backend for the `home` application. It is configured to use the same PostgreSQL settings that are written into the repo-root `.env` file and rendered into Kubernetes secrets during deploy time.
+`home-backend/` is the new Django backend for the `home` application. It is an open-source project and is configured to use the same PostgreSQL settings that are written into the repo-root `.env` file and rendered into Kubernetes secrets during deploy time.
 
 ## Local setup
 
