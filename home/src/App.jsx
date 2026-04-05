@@ -34,6 +34,19 @@ const socialLinks = [
   },
 ]
 
+const developerAccessConfig = {
+  productId: import.meta.env.VITE_STRIPE_PRODUCT_ID || 'prod_UHXHHhIqeNr9YX',
+  checkoutUrl: import.meta.env.VITE_STRIPE_PAYMENT_LINK || '',
+  communityUrl: import.meta.env.VITE_XMAXX_DEVELOPER_COMMUNITY_URL || '',
+}
+
+const developerAccessIncludes = [
+  'Web-based control interface',
+  'Developer SDK and APIs',
+  'Early access features and updates',
+  'Access to the private XMAXX developer community',
+]
+
 const scopePoints = [
   {
     title: 'Automate machine operations',
@@ -1200,8 +1213,11 @@ function SiteFooter() {
   )
 }
 
-function HomePage({
-}) {
+function HomePage({ authState, onOpenLogin }) {
+  const isAuthenticated = authState.authenticated && authState.user
+  const registerHref = isAuthenticated ? '/profile' : ''
+  const checkoutHref = developerAccessConfig.checkoutUrl
+
   return (
     <>
       <section className="hero-panel" id="overview">
@@ -1342,6 +1358,115 @@ function HomePage({
               <p>{description}</p>
             </article>
           ))}
+        </div>
+      </section>
+
+      <section className="section-block" id="developer-access">
+        <div className="section-heading">
+          <p className="eyebrow">Developer Access</p>
+          <h2>XMAXX Developer Access</h2>
+          <p>
+            Access the XMAXX control platform for building and managing drone and
+            autonomous systems.
+          </p>
+        </div>
+
+        <div className="section-split">
+          <article className="surface purchase-card">
+            <div className="purchase-card__head">
+              <div>
+                <p className="section-kicker">Immediate access</p>
+                <h3>Developer platform access delivered right after purchase.</h3>
+              </div>
+              <span className="purchase-card__badge">{developerAccessConfig.productId}</span>
+            </div>
+
+            <p className="purchase-card__copy">
+              Register an operator account, complete checkout, and get access to the current
+              XMAXX builder surface without waiting for manual provisioning.
+            </p>
+
+            <ul className="feature-list purchase-card__list">
+              {developerAccessIncludes.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+
+            <div className="hero-actions purchase-card__actions">
+              {isAuthenticated ? (
+                <a className="button button--ghost" href={registerHref}>
+                  Open profile
+                </a>
+              ) : (
+                <button className="button button--ghost" type="button" onClick={onOpenLogin}>
+                  Register to Access
+                </button>
+              )}
+
+              {checkoutHref ? (
+                <a
+                  className="button button--solid"
+                  href={checkoutHref}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Buy Developer Access
+                </a>
+              ) : (
+                <button className="button button--solid" type="button" disabled>
+                  Buy Developer Access
+                </button>
+              )}
+            </div>
+
+            <p className="purchase-card__meta">
+              This product is delivered immediately upon purchase.
+            </p>
+          </article>
+
+          <aside className="section-aside section-aside--accent purchase-aside">
+            <p className="section-kicker">Flow</p>
+            <h3>Register, buy, and start building.</h3>
+            <p>
+              The account flow runs through the existing sign-in system. Checkout is wired
+              to Stripe as soon as a payment link is configured for this product.
+            </p>
+
+            <div className="purchase-flow">
+              <div className="purchase-flow__step">
+                <strong>1</strong>
+                <div>
+                  <span>Create access</span>
+                  <p>Sign in with GitHub or Google to establish the operator account.</p>
+                </div>
+              </div>
+              <div className="purchase-flow__step">
+                <strong>2</strong>
+                <div>
+                  <span>Complete purchase</span>
+                  <p>Use Stripe checkout for the XMAXX Developer Access product.</p>
+                </div>
+              </div>
+              <div className="purchase-flow__step">
+                <strong>3</strong>
+                <div>
+                  <span>Start building</span>
+                  <p>Use the control platform, SDK, APIs, and developer community access.</p>
+                </div>
+              </div>
+            </div>
+
+            {developerAccessConfig.communityUrl ? (
+              <a
+                className="button button--ghost purchase-aside__button"
+                href={developerAccessConfig.communityUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Open developer community
+              </a>
+            ) : null}
+          </aside>
         </div>
       </section>
 
@@ -1765,7 +1890,7 @@ function App() {
         ) : currentPage === 'computer' ? (
           <CoreUnitPage />
         ) : (
-          <HomePage />
+          <HomePage authState={authState} onOpenLogin={handleOpenLogin} />
         )}
       </main>
 
