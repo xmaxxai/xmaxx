@@ -68,7 +68,7 @@ Primary responsibilities:
 
 The `home` application is deployed as:
 
-- a Docker image pushed to Docker Hub
+- a Docker image pushed to Amazon ECR
 - a Helm release into the `home` namespace
 - a Kubernetes `Service`
 - a Traefik-backed `Ingress`
@@ -126,9 +126,9 @@ Helm turns app deployment into a versioned, repeatable package:
 
 That makes `home` deployable without manual cluster edits.
 
-### Why Docker Hub
+### Why Amazon ECR
 
-Docker Hub provides a simple registry path for the current stage. The image is built locally, pushed to Docker Hub, and pulled by K3s nodes.
+Amazon ECR keeps the registry path inside the AWS account that already hosts the compute layer. Images are built in GitHub Actions, pushed to private ECR with OIDC-backed short-lived credentials, and pulled by K3s nodes through an EC2 IAM instance profile.
 
 ### Why React for the Home App
 

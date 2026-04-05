@@ -3,7 +3,7 @@ namespace: home
 replicaCount: 2
 
 image:
-  repository: athenalive/home
+  repository: 351381968847.dkr.ecr.us-east-2.amazonaws.com/xmaxx/home
   tag: latest
   pullPolicy: Always
 

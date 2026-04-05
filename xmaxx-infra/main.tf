@@ -6,6 +6,10 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
+    tls = {
+      source  = "hashicorp/tls"
+      version = "~> 4.0"
+    }
   }
 }
 
@@ -248,6 +252,7 @@ resource "aws_instance" "xmaxx" {
   subnet_id                   = aws_subnet.private_2a.id
   vpc_security_group_ids      = [aws_security_group.launch_wizard_1.id]
   key_name                    = data.aws_key_pair.xmaxx.key_name
+  iam_instance_profile        = aws_iam_instance_profile.k3s_node_ecr_pull.name
   associate_public_ip_address = true
   monitoring                  = false
   user_data_replace_on_change = false

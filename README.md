@@ -27,14 +27,14 @@ The repo is intentionally managed as code first:
 - AWS region: `us-east-2`
 - Kubernetes distribution: `K3s`
 - Frontend runtime: `React + Vite`, served by `nginx`
-- Container registry: Docker Hub
+- Container registry: Amazon ECR
 - Release path: Helm on K3s
 - Public app domain: `xmaxx.ai`
 - Public control-plane domain: `k3s-api.xmaxx.ai`
 
 ## Container Images
 
-The published Docker tags for `home` and `home-backend` should be multi-architecture manifests, not single-architecture images.
+The published Docker tags for `home` and `home-backend` should be multi-architecture manifests in Amazon ECR, not single-architecture images.
 
 Current requirement:
 
@@ -47,7 +47,7 @@ Recommended release pattern:
 ```bash
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
-  -t athenalive/home:<tag> \
+  -t 351381968847.dkr.ecr.us-east-2.amazonaws.com/xmaxx/home:<tag> \
   --push <context>
 ```
 
@@ -83,6 +83,17 @@ Important constraint:
 The deployed frontend now opens a provider chooser modal and completes OAuth in a popup while the Django backend handles the callback flow on the same `xmaxx.ai` origin.
 
 The detailed app config and deploy-time secret guidance lives in `home-backend/README.md`.
+
+## CI/CD
+
+Application images are now intended to flow through GitHub Actions into Amazon ECR:
+
+- workflow: `.github/workflows/build-and-push-ecr.yml`
+- AWS auth model: GitHub OIDC into the `xmaxx-github-actions-ecr-push` role
+- frontend image: `351381968847.dkr.ecr.us-east-2.amazonaws.com/xmaxx/home`
+- backend image: `351381968847.dkr.ecr.us-east-2.amazonaws.com/xmaxx/home-backend`
+
+The K3s EC2 nodes pull from private ECR through the Terraform-managed instance profile `xmaxx-k3s-node-ecr-pull`.
 
 ## Security Note
 

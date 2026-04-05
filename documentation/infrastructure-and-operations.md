@@ -35,6 +35,7 @@ Key concerns:
 - worker security group
 - app-facing AWS Network Load Balancer
 - target groups and listeners for `80` and `443`
+- private Amazon ECR pull access attached to worker instances
 
 Notable files:
 
@@ -96,7 +97,7 @@ Operational rule:
 
 ### Docker
 
-The `home` application is built into a container image and published to Docker Hub.
+The `home` and `home-backend` applications are built into container images and published to Amazon ECR.
 
 Operational rule:
 
@@ -162,12 +163,14 @@ npm run build
 
 ```bash
 docker buildx build \
-  --platform linux/amd64 \
+  --platform linux/amd64,linux/arm64 \
   --provenance=false \
   --sbom=false \
-  -t <registry-user>/home:latest \
+  -t 351381968847.dkr.ecr.us-east-2.amazonaws.com/xmaxx/home:latest \
   --push ./home
 ```
+
+The automated build path is GitHub Actions using AWS OIDC to assume the `xmaxx-github-actions-ecr-push` role.
 
 ### Render or Upgrade the Helm Release
 
