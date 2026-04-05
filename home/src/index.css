@@ -1220,6 +1220,10 @@ img {
   align-items: stretch;
 }
 
+.spec-grid--scope .spec-card:last-child {
+  grid-column: 1 / -1;
+}
+
 .spec-card {
   border-radius: var(--radius-lg);
   padding: 22px;

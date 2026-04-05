@@ -1354,7 +1354,7 @@ function HomePage({
           </p>
         </div>
 
-        <div className="spec-grid">
+        <div className="spec-grid spec-grid--scope">
           {scopePoints.map((section) => (
             <SpecCard key={section.title} {...section} />
           ))}
