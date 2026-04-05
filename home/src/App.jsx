@@ -32,14 +32,6 @@ const socialLinks = [
     viewBox: '0 0 19 19',
     detail: 'Source, issues, and open build path',
   },
-  {
-    href: 'https://x.com/xmaxxai',
-    label: 'X',
-    handle: 'xmaxxai',
-    icon: 'x-icon',
-    viewBox: '0 0 19 19',
-    detail: 'Updates from the public build',
-  },
 ]
 
 const scopePoints = [
@@ -1431,14 +1423,6 @@ function HomePage({
             rel="noreferrer"
           >
             GitHub repo
-          </a>
-          <a
-            className="button button--ghost"
-            href="https://x.com/xmaxxai"
-            target="_blank"
-            rel="noreferrer"
-          >
-            Follow on X
           </a>
         </div>
       </section>
