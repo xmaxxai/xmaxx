@@ -99,6 +99,7 @@ Application images are now intended to flow through GitHub Actions into Amazon E
 - backend image: `351381968847.dkr.ecr.us-east-2.amazonaws.com/xmaxx/home-backend`
 
 The K3s EC2 nodes pull from private ECR through the Terraform-managed instance profile `xmaxx-k3s-node-ecr-pull`.
+The Helm charts now also include namespace-scoped image automation CronJobs that poll ECR for `latest` and `backend-latest`, annotate the live Deployment with the last seen digest, and trigger a rollout only when the digest changes.
 
 ## Security Note
 

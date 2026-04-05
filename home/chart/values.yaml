@@ -9,6 +9,13 @@ image:
 
 imagePullSecrets: []
 
+imageAutomation:
+  enabled: true
+  schedule: "*/5 * * * *"
+  awsRegion: us-east-2
+  checkerImage: public.ecr.aws/aws-cli/aws-cli:2.27.37
+  kubectlVersion: v1.32.3
+
 service:
   port: 80
 

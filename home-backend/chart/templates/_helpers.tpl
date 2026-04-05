@@ -9,3 +9,7 @@
 {{- include "home-backend.name" . -}}
 {{- end -}}
 {{- end -}}
+
+{{- define "home-backend.ecrRepositoryName" -}}
+{{- regexReplaceAll "^[^/]+/" .Values.image.repository "" -}}
+{{- end -}}
