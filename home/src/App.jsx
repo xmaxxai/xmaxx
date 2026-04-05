@@ -1313,7 +1313,7 @@ function HomePage({
           </p>
         </div>
 
-        <div className="use-case-grid">
+        <div className="use-case-grid use-case-grid--triad">
           {customerSections.map(({ title, description }) => (
             <article className="use-case-card" key={title}>
               <p className="section-kicker">Customer</p>
@@ -1334,7 +1334,7 @@ function HomePage({
           </p>
         </div>
 
-        <div className="use-case-grid">
+        <div className="use-case-grid use-case-grid--triad">
           {offerSections.map(({ title, description }) => (
             <article className="use-case-card" key={title}>
               <p className="section-kicker">Offer</p>
@@ -1409,7 +1409,7 @@ function HomePage({
           </p>
         </div>
 
-        <div className="spec-grid">
+        <div className="spec-grid spec-grid--triad">
           {proofSections.map((section) => (
             <SpecCard key={section.title} {...section} />
           ))}

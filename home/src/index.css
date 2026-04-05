@@ -1187,6 +1187,20 @@ img {
   animation: reveal-up 820ms ease-out both;
 }
 
+.section-block::before {
+  content: '';
+  position: absolute;
+  inset: -32% auto auto -12%;
+  width: 42%;
+  height: 76%;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(109, 166, 255, 0.12), transparent 70%);
+  filter: blur(16px);
+  opacity: 0.8;
+  animation: section-drift 12s ease-in-out infinite;
+  pointer-events: none;
+}
+
 .section-block::after {
   content: '';
   position: absolute;
@@ -1224,11 +1238,32 @@ img {
   grid-column: 1 / -1;
 }
 
+.spec-grid--triad .spec-card:last-child {
+  grid-column: 1 / -1;
+}
+
 .spec-card {
+  position: relative;
+  overflow: hidden;
   border-radius: var(--radius-lg);
   padding: 22px;
   animation: reveal-up 760ms ease-out both;
   height: 100%;
+}
+
+.spec-card::after,
+.use-case-card::after,
+.mode-card::after {
+  content: '';
+  position: absolute;
+  inset: -35% auto auto -40%;
+  width: 58%;
+  height: 180%;
+  transform: rotate(18deg);
+  background: linear-gradient(180deg, transparent, rgba(255, 255, 255, 0.08), transparent);
+  opacity: 0;
+  pointer-events: none;
+  animation: card-sweep 9s ease-in-out infinite;
 }
 
 .spec-card__header {
@@ -1616,8 +1651,18 @@ img {
   gap: 18px;
 }
 
+.use-case-grid--triad {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.use-case-grid--triad .use-case-card:last-child {
+  grid-column: 1 / -1;
+}
+
 .use-case-card,
 .support-card {
+  position: relative;
+  overflow: hidden;
   padding: 22px;
   border-radius: var(--radius-lg);
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -1633,6 +1678,29 @@ img {
     transform 200ms ease-out,
     border-color 200ms ease-out,
     box-shadow 200ms ease-out;
+}
+
+.mode-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.use-case-card:nth-child(2)::after,
+.spec-card:nth-child(2)::after,
+.mode-card:nth-child(2)::after {
+  animation-delay: 1.2s;
+}
+
+.use-case-card:nth-child(3)::after,
+.spec-card:nth-child(3)::after,
+.mode-card:nth-child(3)::after {
+  animation-delay: 2.4s;
+}
+
+.use-case-card:nth-child(4)::after,
+.spec-card:nth-child(4)::after,
+.mode-card:nth-child(4)::after {
+  animation-delay: 3.6s;
 }
 
 .use-case-card:hover,
@@ -2135,6 +2203,37 @@ img {
 
   50% {
     transform: translateY(-4px);
+  }
+}
+
+@keyframes section-drift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.55;
+  }
+
+  50% {
+    transform: translate3d(22px, 14px, 0) scale(1.08);
+    opacity: 0.9;
+  }
+}
+
+@keyframes card-sweep {
+  0%,
+  100% {
+    transform: translate3d(-140%, 0, 0) rotate(18deg);
+    opacity: 0;
+  }
+
+  10%,
+  18% {
+    opacity: 0.85;
+  }
+
+  28% {
+    transform: translate3d(220%, 0, 0) rotate(18deg);
+    opacity: 0;
   }
 }
 
