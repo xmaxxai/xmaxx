@@ -1074,12 +1074,12 @@ function HomePage({
     <>
       <section className="hero-panel" id="overview">
         <div className="hero-copy">
-          <p className="eyebrow">Open-source voice computing project</p>
-          <h1>XMAXX is building an open voice-first computer stack.</h1>
+          <p className="eyebrow">Open-source project</p>
+          <h1>XMAXX is an open-source project building voice-first computing in public.</h1>
           <p className="hero-copy__lede">
-            The current public build starts with XMAXX Computer: a macOS product that
-            keeps a live voice loop open, turns spoken intent into structured action,
-            and exposes the stack in public so others can inspect, extend, and ship it.
+            The repo, infrastructure, backend, deployment path, and current app surface
+            are all being built in the open. XMAXX is meant to be inspectable, forkable,
+            and clear about what exists now versus what is still being developed.
           </p>
 
           <div className="verb-strip" aria-label="Current macOS app capabilities">
@@ -1106,9 +1106,9 @@ function HomePage({
           </div>
 
           <p className="hero-copy__support">
-            Today the shipped stack combines live transcription, decision scaffolds,
-            screenshot OCR, native mouse events, spoken replies, and approval-gated
-            actions in one inspectable product surface.
+            The current public build already ships real runtime pieces: live
+            transcription, explicit decision scaffolds, OCR targeting, native mouse
+            actions, spoken replies, and a deployment path that is visible end to end.
           </p>
 
           <div className="hero-stats">
@@ -1127,8 +1127,8 @@ function HomePage({
 
           <div className="hero-visual__meta">
             <div>
-              <p className="section-kicker">Current product</p>
-              <h2>One spoken command can move from capture to visible action.</h2>
+              <p className="section-kicker">Built In Public</p>
+              <h2>The first page should explain the project clearly before it sells the product.</h2>
             </div>
 
             <div className="hardware-highlights">
