@@ -4118,7 +4118,7 @@ private final class MissionTranscriber {
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
         if recognizer.supportsOnDeviceRecognition {
-            request.requiresOnDeviceRecognition = false
+            request.requiresOnDeviceRecognition = true
         }
 
         recognitionRequest = request
@@ -4140,7 +4140,7 @@ private final class MissionTranscriber {
 
     private func handleRecognition(result: SFSpeechRecognitionResult?, error: Error?) {
         if let error {
-            _ = error
+            print("Speech recognition error: \(error.localizedDescription)")
             finishCurrentUtterance(withFallback: lastTranscript)
             restartRecognitionSession()
             return
