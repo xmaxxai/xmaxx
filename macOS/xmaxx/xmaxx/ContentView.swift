@@ -323,6 +323,73 @@ private struct ControlDeckPanel: View {
                     }
                 }
 
+                fieldBlock(title: "Typed Fallback") {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text(typedInstructionHint)
+                            .font(.system(size: 12, weight: .medium, design: .rounded))
+                            .foregroundStyle(Color.white.opacity(0.62))
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        ZStack(alignment: .topLeading) {
+                            if store.typedInstructionDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                Text(typedInstructionPlaceholder)
+                                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                                    .foregroundStyle(Color.white.opacity(0.28))
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 16)
+                            }
+
+                            TextEditor(text: $store.typedInstructionDraft)
+                                .scrollContentBackground(.hidden)
+                                .font(.system(size: 14, weight: .medium, design: .rounded))
+                                .foregroundStyle(.white.opacity(0.88))
+                                .padding(12)
+                                .frame(minHeight: 112)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                        .fill(Color.black.opacity(0.18))
+                                )
+                                .overlay {
+                                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                        .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                                }
+                        }
+
+                        HStack(spacing: 10) {
+                            Button(typedInstructionButtonTitle) {
+                                store.submitTypedInstruction()
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(typedInstructionCanSubmit ? Color.black.opacity(0.82) : Color.white.opacity(0.46))
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 10)
+                            .background(
+                                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                    .fill(typedInstructionCanSubmit ? Color(red: 0.57, green: 0.89, blue: 0.74) : Color.white.opacity(0.10))
+                            )
+                            .disabled(!typedInstructionCanSubmit)
+
+                            if !store.typedInstructionDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                Button("Clear") {
+                                    store.typedInstructionDraft = ""
+                                }
+                                .buttonStyle(.plain)
+                                .foregroundStyle(.white.opacity(0.86))
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 10)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                        .fill(Color.white.opacity(0.08))
+                                )
+                                .overlay {
+                                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                        .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                                }
+                            }
+                        }
+                    }
+                }
+
                 fieldBlock(title: "Loop Context") {
                     VStack(alignment: .leading, spacing: 12) {
                         ContextEditor(title: "Environment", text: $store.environmentText, minHeight: 150)
@@ -373,6 +440,48 @@ private struct ControlDeckPanel: View {
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
                     .stroke(Color.white.opacity(0.08), lineWidth: 1)
             }
+    }
+
+    private var typedInstructionCanSubmit: Bool {
+        !store.typedInstructionDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var typedInstructionButtonTitle: String {
+        if store.pendingOperatorPrompt != nil {
+            return "Send Typed Reply"
+        }
+
+        if store.status == .running {
+            return "Send Typed Steering"
+        }
+
+        return store.missionText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? "Run Typed Mission"
+            : "Add To Mission And Run"
+    }
+
+    private var typedInstructionPlaceholder: String {
+        if let prompt = store.pendingOperatorPrompt {
+            return prompt.responsePlaceholder
+        }
+
+        if store.status == .running {
+            return "Type a course correction, a stop command, or fresh steering for the active loop."
+        }
+
+        return "Type the mission or any instruction you want xmaxx to run without relying on voice capture."
+    }
+
+    private var typedInstructionHint: String {
+        if store.pendingOperatorPrompt != nil {
+            return "Voice can stay off here. This typed reply will answer the open prompt immediately."
+        }
+
+        if store.status == .running {
+            return "Use this when speech is flaky. Typed text will be treated as live steering for the running loop."
+        }
+
+        return "Use typed instructions as a full fallback for speech. Submitted text becomes mission input and starts the loop immediately."
     }
 }
 

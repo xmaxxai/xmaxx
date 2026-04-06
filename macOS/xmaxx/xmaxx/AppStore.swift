@@ -657,6 +657,7 @@ final class AppStore: ObservableObject {
     @Published var voiceAnalysisSummary: String
     @Published var externalDialogText: String
     @Published var internalDialogText: String
+    @Published var typedInstructionDraft: String
     @Published private(set) var pendingOperatorPrompt: OperatorPrompt?
     @Published var pendingOperatorResponseDraft: String
     @Published private(set) var awaitingOperatorInput: Bool
@@ -814,6 +815,7 @@ final class AppStore: ObservableObject {
         voiceAnalysisSummary = ""
         externalDialogText = "Ready to speak to the operator."
         internalDialogText = "Internal guided-loop narration will appear here."
+        typedInstructionDraft = ""
         pendingOperatorPrompt = nil
         pendingOperatorResponseDraft = ""
         awaitingOperatorInput = false
@@ -1022,6 +1024,7 @@ final class AppStore: ObservableObject {
 
         missionText = ""
         operatorFeedback = ""
+        typedInstructionDraft = ""
         voiceAnalysisSummary = ""
         externalDialogText = "Ready for a new session."
         internalDialogText = "Session reset. Awaiting a fresh mission."
@@ -1878,6 +1881,59 @@ final class AppStore: ObservableObject {
         )
     }
 
+    func submitTypedInstruction() {
+        let trimmedInstruction = typedInstructionDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedInstruction.isEmpty else { return }
+
+        typedInstructionDraft = ""
+        let normalizedInstruction = trimmedInstruction.lowercased()
+
+        if let prompt = pendingOperatorPrompt {
+            pendingOperatorResponseDraft = trimmedInstruction
+            recordingStatusMessage = "Typed response received."
+
+            if prompt.kind == .actionApproval && isActionConfirmationCommand(normalizedInstruction) {
+                status = .running
+                statusMessage = "Typed approval received. Executing approved actions."
+                updateVoiceFlow(
+                    state: .processing,
+                    title: "Typed approval captured",
+                    detail: "The typed approval was accepted for the waiting plan and execution is starting now.",
+                    transcript: trimmedInstruction
+                )
+                submitPendingOperatorPromptProceed(responseOverride: trimmedInstruction)
+                return
+            }
+
+            if isPromptRevisionCommand(normalizedInstruction) {
+                updateVoiceFlow(
+                    state: .captured,
+                    title: "Typed revision captured",
+                    detail: "The typed reply requested a revision before continuing.",
+                    transcript: trimmedInstruction
+                )
+                submitPendingOperatorPromptRevise(responseOverride: trimmedInstruction)
+                return
+            }
+
+            updateVoiceFlow(
+                state: .captured,
+                title: "Typed reply captured",
+                detail: "The typed reply was submitted to the open prompt.",
+                transcript: trimmedInstruction
+            )
+            submitPendingOperatorPromptProceed(responseOverride: trimmedInstruction)
+            return
+        }
+
+        if status == .running || loopTask != nil {
+            applyTypedOperatorSteering(trimmedInstruction, normalizedInstruction: normalizedInstruction)
+            return
+        }
+
+        applyTypedMissionInstruction(trimmedInstruction)
+    }
+
     private func beginMissionListening() {
         guard voiceLoopEnabled else { return }
         listeningRestartTask?.cancel()
@@ -2198,6 +2254,90 @@ final class AppStore: ObservableObject {
         }
     }
 
+    private func applyTypedMissionInstruction(_ instruction: String) {
+        missionText = appendMissionEntry(instruction, to: missionText)
+        persistWorkspaceDraft()
+        recordingStatusMessage = "Typed mission captured. Running x-maxx now."
+        appendConversationEntry(
+            ConversationMessage(
+                speaker: .user,
+                text: instruction,
+                detail: "Typed mission input submitted.",
+                state: .captured
+            )
+        )
+        updateVoiceFlow(
+            state: .processing,
+            title: "Typed mission captured",
+            detail: "The typed instruction was added to the mission and the loop is starting now.",
+            transcript: instruction
+        )
+        runNavigationLoop(preserveVoiceLoop: voiceLoopEnabled)
+    }
+
+    private func applyTypedOperatorSteering(_ instruction: String, normalizedInstruction: String) {
+        if normalizedInstruction.contains("stop loop") || normalizedInstruction.contains("cancel loop") || normalizedInstruction.contains("halt loop") {
+            recordingStatusMessage = "Typed stop command received. Stopping the loop."
+            appendConversationEntry(
+                ConversationMessage(
+                    speaker: .user,
+                    text: instruction,
+                    detail: "Typed stop command submitted.",
+                    state: .captured
+                )
+            )
+            updateVoiceFlow(
+                state: .captured,
+                title: "Typed stop command",
+                detail: "The typed stop command was accepted and the active loop is stopping now.",
+                transcript: instruction
+            )
+            stopLoop()
+            return
+        }
+
+        operatorFeedback = appendTypedOperatorFeedbackEntry(instruction, to: operatorFeedback)
+        persistWorkspaceDraft()
+        recordingStatusMessage = "Typed steering captured and appended to the active context."
+        appendConversationEntry(
+            ConversationMessage(
+                speaker: .user,
+                text: instruction,
+                detail: "Typed steering submitted.",
+                state: .captured
+            )
+        )
+
+        if awaitingActionConfirmation {
+            statusMessage = "Typed steering received. Replanning before any action executes."
+            updateVoiceFlow(
+                state: .processing,
+                title: "Typed steering captured",
+                detail: "The typed steering was appended and the waiting plan is being revised before anything executes.",
+                transcript: instruction
+            )
+            submitPendingOperatorPromptRevise(responseOverride: instruction)
+            return
+        }
+
+        if loopTask != nil {
+            updateVoiceFlow(
+                state: .processing,
+                title: "Typed steering captured",
+                detail: "The typed steering was appended to the live loop context and planning is restarting now.",
+                transcript: instruction
+            )
+            restartLoopPlanningWithLatestContext()
+        } else {
+            updateVoiceFlow(
+                state: .captured,
+                title: "Typed steering captured",
+                detail: "The typed steering was appended and is ready for the next loop cycle.",
+                transcript: instruction
+            )
+        }
+    }
+
     private func startBackgroundVoiceAnalysis(
         _ capture: MissionCapture,
         analysisPurpose: String
@@ -2301,6 +2441,13 @@ final class AppStore: ObservableObject {
         guard !trimmedEntry.isEmpty else { return existingText }
 
         return appendDistinctEntry(trimmedEntry, prefix: "Voice steer", existingText: existingText, limit: 12)
+    }
+
+    private func appendTypedOperatorFeedbackEntry(_ entry: String, to existingText: String) -> String {
+        let trimmedEntry = entry.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedEntry.isEmpty else { return existingText }
+
+        return appendDistinctEntry(trimmedEntry, prefix: "Typed steer", existingText: existingText, limit: 12)
     }
 
     private func appendDistinctEntry(
