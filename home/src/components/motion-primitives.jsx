@@ -1,7 +1,7 @@
 import { motion, useReducedMotion } from 'motion/react'
 
 const ease = [0.22, 1, 0.36, 1]
-const viewport = { once: true, amount: 0.18 }
+const viewport = { once: true, amount: 0.12 }
 
 export function Reveal({
   as: Component = motion.div,
@@ -15,10 +15,10 @@ export function Reveal({
   return (
     <Component
       className={className}
-      initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 18 }}
+      initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 34 }}
       whileInView={reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
       viewport={viewport}
-      transition={{ duration: 0.32, delay, ease }}
+      transition={{ duration: 0.72, delay, ease }}
       {...props}
     >
       {children}
@@ -30,8 +30,8 @@ export function StaggerGroup({
   as: Component = motion.div,
   children,
   className,
-  delayChildren = 0.04,
-  staggerChildren = 0.06,
+  delayChildren = 0.12,
+  staggerChildren = 0.16,
   ...props
 }) {
   const reduceMotion = useReducedMotion()
@@ -74,11 +74,11 @@ export function StaggerItem({
         reduceMotion
           ? undefined
           : {
-              hidden: { opacity: 0, y: 12 },
+              hidden: { opacity: 0, y: 26 },
               visible: {
                 opacity: 1,
                 y: 0,
-                transition: { duration: 0.28, ease },
+                transition: { duration: 0.62, ease },
               },
             }
       }
