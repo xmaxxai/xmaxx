@@ -972,7 +972,7 @@ function AuthControls({
           : busyProvider
             ? `Finishing ${getProviderLabel(busyProvider)}...`
             : availableProviders.length > 0
-              ? 'Choose sign-in'
+              ? 'Sign in'
               : 'Auth not configured'}
       </button>
     </div>
