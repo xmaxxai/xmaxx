@@ -1309,13 +1309,14 @@ function HomePage({ authState, onOpenLogin }) {
       <Reveal as="section" className="hero-panel" id="overview">
         <div className="hero-copy">
           <p className="eyebrow">MAXX open source project</p>
-          <h1>Automate Everything to the MAXX.</h1>
+          <h1>Control Drones, Computers, and Machines to the MAXX.</h1>
           <p className="hero-copy__lede">
-            MAXX is an open source project focused on one thing: automating work across software,
-            computers, and machines from a single control layer.
+            MAXX is an open source control layer for drones, computers, and machine systems,
+            built to move beyond manual operation and into visible intelligent execution.
           </p>
           <p className="hero-copy__support">
-            MAXX is focused on practical automation, visible execution, and an open product surface.
+            This is not just automation software. MAXX is about operating real systems,
+            coordinating execution, and keeping the product surface open in public.
           </p>
 
           <div className="verb-strip" aria-label="XMAXX control scope">
