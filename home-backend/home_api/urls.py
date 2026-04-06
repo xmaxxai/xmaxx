@@ -11,6 +11,7 @@ from .views import (
     google_login,
     health,
     index,
+    preorder_signup_list,
     profile_detail,
 )
 
@@ -20,6 +21,7 @@ urlpatterns = [
     path("health/", health, name="health"),
     path("api/auth/session/", auth_session, name="auth-session"),
     path("api/profile/", profile_detail, name="profile-detail"),
+    path("api/preorders/", preorder_signup_list, name="preorder-signup-list"),
     path("api/tokens/", access_token_list, name="access-token-list"),
     path("api/tokens/<str:token_key>/", access_token_detail, name="access-token-detail"),
     path("api/auth/github/login/", github_login, name="github-login"),

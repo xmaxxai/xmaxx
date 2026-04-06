@@ -41,6 +41,11 @@ const developerAccessConfig = {
   communityUrl: import.meta.env.VITE_XMAXX_DEVELOPER_COMMUNITY_URL || '',
 }
 
+const computerRelease = {
+  launchAt: '2026-09-24T17:00:00.000Z',
+  label: 'September 24, 2026',
+}
+
 const developerAccessIncludes = [
   'Web-based control interface',
   'Developer SDK and APIs',
@@ -723,6 +728,86 @@ function readAuthNotice() {
   window.history.replaceState({}, document.title, nextUrl || '/')
 
   return notice
+}
+
+function parseApiError(response, payload) {
+  const error = new Error(
+    payload.detail || payload.messages?.[0] || `Request failed with status ${response.status}`,
+  )
+  error.status = response.status
+  error.payload = payload
+  return error
+}
+
+async function parseJsonResponse(response) {
+  const text = await response.text()
+
+  if (!text) {
+    return {}
+  }
+
+  try {
+    return JSON.parse(text)
+  } catch {
+    return {}
+  }
+}
+
+function readCookie(name) {
+  if (typeof document === 'undefined') {
+    return ''
+  }
+
+  const prefix = `${name}=`
+
+  for (const part of document.cookie.split(';')) {
+    const cookie = part.trim()
+
+    if (cookie.startsWith(prefix)) {
+      return decodeURIComponent(cookie.slice(prefix.length))
+    }
+  }
+
+  return ''
+}
+
+async function createPreorderSignup({ email, product, sourcePath }) {
+  const csrfToken = readCookie('csrftoken')
+  const headers = {
+    Accept: 'application/json',
+    'Content-Type': 'application/json',
+  }
+
+  if (csrfToken) {
+    headers['X-CSRFToken'] = csrfToken
+  }
+
+  const response = await fetch('/api/preorders/', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers,
+    body: JSON.stringify({ email, product, sourcePath }),
+  })
+  const payload = await parseJsonResponse(response)
+
+  if (!response.ok) {
+    throw parseApiError(response, payload)
+  }
+
+  return payload
+}
+
+function getCountdownParts(targetDate) {
+  const distance = Math.max(targetDate.getTime() - Date.now(), 0)
+  const totalSeconds = Math.floor(distance / 1000)
+
+  return {
+    expired: distance <= 0,
+    days: Math.floor(totalSeconds / 86400),
+    hours: Math.floor((totalSeconds % 86400) / 3600),
+    minutes: Math.floor((totalSeconds % 3600) / 60),
+    seconds: totalSeconds % 60,
+  }
 }
 
 async function requestAuthSession(signal) {
@@ -1587,7 +1672,167 @@ function HomePage({ authState, onOpenLogin }) {
   )
 }
 
-function CoreUnitPage() {
+function ComputerReleaseSection({ authState, onOpenLogin }) {
+  const launchDate = useRef(new Date(computerRelease.launchAt))
+  const [countdown, setCountdown] = useState(() => getCountdownParts(launchDate.current))
+  const [email, setEmail] = useState(() => authState.user?.email || '')
+  const [status, setStatus] = useState(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const isAuthenticated = authState.authenticated && authState.user
+
+  useEffect(() => {
+    if (authState.user?.email) {
+      setEmail((current) => current || authState.user.email)
+    }
+  }, [authState.user?.email])
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setCountdown(getCountdownParts(launchDate.current))
+    }, 1000)
+
+    return () => window.clearInterval(timer)
+  }, [])
+
+  async function handleSubmit(event) {
+    event.preventDefault()
+
+    if (!email.trim()) {
+      setStatus({
+        tone: 'error',
+        title: 'Email required',
+        body: 'Enter an email address to join the XMAXX Computer preorder list.',
+      })
+      return
+    }
+
+    setIsSubmitting(true)
+    setStatus(null)
+
+    try {
+      const payload = await createPreorderSignup({
+        email: email.trim(),
+        product: 'xmaxx-computer',
+        sourcePath: '/computer',
+      })
+
+      setStatus({
+        tone: 'success',
+        title: payload.created ? 'Preorder saved' : 'Preorder updated',
+        body: payload.created
+          ? 'You are on the XMAXX Computer preorder list. The backend has the signup.'
+          : 'That email was already on the preorder list, so the backend record was refreshed.',
+      })
+    } catch (error) {
+      setStatus({
+        tone: 'error',
+        title: 'Signup failed',
+        body: error instanceof Error ? error.message : 'Unable to save the preorder signup right now.',
+      })
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const countdownBlocks = [
+    { label: 'Days', value: countdown.days },
+    { label: 'Hours', value: countdown.hours },
+    { label: 'Minutes', value: countdown.minutes },
+    { label: 'Seconds', value: countdown.seconds },
+  ]
+
+  return (
+    <Reveal as="section" className="section-block" id="preorder">
+      <div className="section-heading">
+        <p className="eyebrow">Release Window</p>
+        <h2>XMAXX Computer targets a {computerRelease.label} release.</h2>
+        <p>
+          The first production run is being framed as a formal launch. Join the preorder list now
+          and we will hold the release updates against a real backend record instead of a dead form.
+        </p>
+      </div>
+
+      <div className="section-split">
+        <article className="surface purchase-card preorder-card">
+          <div className="purchase-card__head preorder-card__head">
+            <div>
+              <p className="section-kicker">Countdown</p>
+              <h3>{countdown.expired ? 'Release window is open.' : `Shipping target: ${computerRelease.label}`}</h3>
+            </div>
+            <span className="purchase-card__badge">Preorder</span>
+          </div>
+
+          <div className="countdown-grid" aria-label="Countdown to XMAXX Computer release">
+            {countdownBlocks.map(({ label, value }) => (
+              <div className="countdown-cell" key={label}>
+                <strong>{String(value).padStart(2, '0')}</strong>
+                <span>{label}</span>
+              </div>
+            ))}
+          </div>
+
+          <p className="purchase-card__copy">
+            This list is for people who want launch updates, release timing, and first access to
+            XMAXX Computer as the product moves out of the current public build phase.
+          </p>
+        </article>
+
+        <aside className="section-aside section-aside--accent preorder-aside">
+          <p className="section-kicker">Preorder Signup</p>
+          <h3>Reserve release updates with your email.</h3>
+          <p>
+            The signup is live. Every submission is stored on the backend, and a superuser can
+            inspect the preorder list in Django admin.
+          </p>
+
+          <form className="preorder-form" onSubmit={handleSubmit}>
+            <label className="preorder-form__field">
+              <span>Email address</span>
+              <input
+                type="email"
+                name="email"
+                autoComplete="email"
+                placeholder="you@company.com"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                required
+              />
+            </label>
+
+            <div className="preorder-form__actions">
+              <button className="button button--solid" type="submit" disabled={isSubmitting}>
+                {isSubmitting ? 'Saving preorder…' : 'Join preorder'}
+              </button>
+
+              {isAuthenticated ? (
+                <a className="button button--ghost" href="/profile">
+                  Open profile
+                </a>
+              ) : (
+                <button className="button button--ghost" type="button" onClick={onOpenLogin}>
+                  Sign in
+                </button>
+              )}
+            </div>
+          </form>
+
+          {status ? (
+            <div className={`workspace-notice workspace-notice--${status.tone}`} role="status">
+              <strong>{status.title}</strong>
+              <span>{status.body}</span>
+            </div>
+          ) : null}
+
+          <p className="purchase-card__meta preorder-aside__meta">
+            Admin path: <code>/admin/</code> {'->'} <strong>Preorder signups</strong>
+          </p>
+        </aside>
+      </div>
+    </Reveal>
+  )
+}
+
+function CoreUnitPage({ authState, onOpenLogin }) {
   return (
     <>
       <section className="hero-panel" id="product-overview">
@@ -1699,6 +1944,8 @@ function CoreUnitPage() {
           ))}
         </div>
       </section>
+
+      <ComputerReleaseSection authState={authState} onOpenLogin={onOpenLogin} />
 
       <section className="closing-panel">
         <p className="eyebrow">Open Project</p>
@@ -1895,7 +2142,7 @@ function App() {
         ) : currentPage === 'access-tokens' ? (
           <ApiTokensPage authState={authState} onOpenLogin={handleOpenLogin} />
         ) : currentPage === 'computer' ? (
-          <CoreUnitPage />
+          <CoreUnitPage authState={authState} onOpenLogin={handleOpenLogin} />
         ) : (
           <HomePage authState={authState} onOpenLogin={handleOpenLogin} />
         )}

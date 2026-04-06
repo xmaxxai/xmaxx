@@ -7,6 +7,7 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from urllib.request import Request, urlopen
 
 from django.conf import settings
+from django.core.validators import validate_email
 from django.core.exceptions import ValidationError
 from django.db import connection
 from django.http import HttpResponse, JsonResponse
@@ -15,7 +16,7 @@ from django.utils import timezone
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_http_methods
 
-from .models import AccessToken, Profile
+from .models import AccessToken, PreorderSignup, Profile
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,12 @@ PROFILE_FIELD_MAP = {
 
 TOKEN_FIELD_MAP = {
     "name": "name",
+}
+
+PREORDER_FIELD_MAP = {
+    "email": "email",
+    "product": "product",
+    "sourcePath": "source_path",
 }
 
 
@@ -390,6 +397,81 @@ def _access_token_payload(request):
     return {"name": str(payload.get("name") or "").strip()}, None
 
 
+def _preorder_payload(request):
+    if not request.body:
+        return None, _json_no_store(
+            {
+                "error": "invalid_json",
+                "detail": "Preorder requests must send a JSON object payload.",
+            },
+            status=400,
+        )
+
+    try:
+        payload = json.loads(request.body.decode("utf-8"))
+    except json.JSONDecodeError:
+        return None, _json_no_store(
+            {
+                "error": "invalid_json",
+                "detail": "Preorder requests must send valid JSON.",
+            },
+            status=400,
+        )
+
+    if not isinstance(payload, dict):
+        return None, _json_no_store(
+            {
+                "error": "invalid_json",
+                "detail": "Preorder requests must send a JSON object payload.",
+            },
+            status=400,
+        )
+
+    unknown_fields = sorted(set(payload) - set(PREORDER_FIELD_MAP))
+
+    if unknown_fields:
+        return None, _json_no_store(
+            {
+                "error": "unknown_fields",
+                "detail": "The request included unsupported preorder fields.",
+                "fields": unknown_fields,
+            },
+            status=400,
+        )
+
+    normalized = {
+        "email": str(payload.get("email") or "").strip().lower(),
+        "product": str(payload.get("product") or "xmaxx-computer").strip() or "xmaxx-computer",
+        "source_path": str(payload.get("sourcePath") or "").strip(),
+    }
+
+    if not normalized["email"]:
+        return None, _json_no_store(
+            {
+                "error": "validation_error",
+                "detail": "An email address is required for the preorder list.",
+                "fields": {"email": ["Enter an email address for the preorder list."]},
+                "messages": ["Enter an email address for the preorder list."],
+            },
+            status=400,
+        )
+
+    try:
+        validate_email(normalized["email"])
+    except ValidationError:
+        return None, _json_no_store(
+            {
+                "error": "validation_error",
+                "detail": "Enter a valid email address for the preorder list.",
+                "fields": {"email": ["Enter a valid email address."]},
+                "messages": ["Enter a valid email address."],
+            },
+            status=400,
+        )
+
+    return normalized, None
+
+
 def _profile_response(profile):
     return {
         "id": profile.id,
@@ -414,6 +496,20 @@ def _access_token_response(token):
         "createdAt": token.created_at.isoformat(),
         "lastUsedAt": token.last_used_at.isoformat() if token.last_used_at else None,
         "revokedAt": token.revoked_at.isoformat() if token.revoked_at else None,
+    }
+
+
+def _preorder_response(sign_up):
+    return {
+        "id": sign_up.id,
+        "email": sign_up.email,
+        "product": sign_up.product,
+        "sourcePath": sign_up.source_path,
+        "provider": sign_up.provider,
+        "authLogin": sign_up.auth_login,
+        "authName": sign_up.auth_name,
+        "createdAt": sign_up.created_at.isoformat(),
+        "updatedAt": sign_up.updated_at.isoformat(),
     }
 
 
@@ -869,6 +965,63 @@ def access_token_detail(request, token_key):
         token.save(update_fields=["revoked_at"])
 
     return _json_no_store({"token": _access_token_response(token)})
+
+
+@ensure_csrf_cookie
+@require_http_methods(["POST"])
+def preorder_signup_list(request):
+    payload, payload_error = _preorder_payload(request)
+
+    if payload_error:
+        return payload_error
+
+    auth_user, auth_provider = _session_auth_context(request)
+    provider_user_id = str(auth_user.get("id") or "").strip() if auth_user else ""
+    profile = None
+
+    if auth_user and auth_provider and provider_user_id:
+        profile = Profile.objects.filter(
+            provider=auth_provider,
+            provider_user_id=provider_user_id,
+        ).first()
+
+    sign_up = PreorderSignup.objects.filter(email__iexact=payload["email"]).first()
+    created = sign_up is None
+
+    if created:
+        sign_up = PreorderSignup(email=payload["email"])
+
+    sign_up.product = payload["product"]
+    sign_up.source_path = payload["source_path"]
+    sign_up.provider = auth_provider or ""
+    sign_up.provider_user_id = provider_user_id
+    sign_up.auth_email = (auth_user.get("email") or "").strip() if auth_user else ""
+    sign_up.auth_login = (auth_user.get("login") or "").strip() if auth_user else ""
+    sign_up.auth_name = (auth_user.get("name") or "").strip() if auth_user else ""
+    sign_up.profile = profile
+
+    try:
+        sign_up.full_clean()
+        sign_up.save()
+    except ValidationError as exc:
+        fields = getattr(exc, "message_dict", {})
+        return _json_no_store(
+            {
+                "error": "validation_error",
+                "detail": "The preorder signup did not pass validation.",
+                "fields": fields,
+                "messages": exc.messages,
+            },
+            status=400,
+        )
+
+    return _json_no_store(
+        {
+            "created": created,
+            "signup": _preorder_response(sign_up),
+        },
+        status=201 if created else 200,
+    )
 
 
 def github_login(request):

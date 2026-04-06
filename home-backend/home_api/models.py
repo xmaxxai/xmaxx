@@ -52,3 +52,36 @@ class AccessToken(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.token_key})"
+
+
+class PreorderSignup(models.Model):
+    product = models.CharField(max_length=80, default="xmaxx-computer")
+    email = models.EmailField(unique=True)
+    provider = models.CharField(max_length=20, blank=True)
+    provider_user_id = models.CharField(max_length=255, blank=True)
+    auth_email = models.EmailField(blank=True)
+    auth_login = models.CharField(max_length=255, blank=True)
+    auth_name = models.CharField(max_length=255, blank=True)
+    profile = models.ForeignKey(
+        Profile,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="preorder_signups",
+    )
+    source_path = models.CharField(max_length=255, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["product", "created_at"], name="home_api_preorder_product_idx"),
+            models.Index(
+                fields=["provider", "provider_user_id"],
+                name="home_api_preorder_owner_idx",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.product} preorder ({self.email})"

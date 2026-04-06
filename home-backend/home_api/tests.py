@@ -3,6 +3,7 @@ import json
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
 
+from home_api.models import PreorderSignup
 from home_api.views import _oauth_popup_response, github_login
 
 
@@ -198,3 +199,88 @@ class AccessTokenApiTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json()["error"], "validation_error")
         self.assertIn("name", response.json()["fields"])
+
+
+class PreorderSignupApiTests(TestCase):
+    def setUp(self):
+        session = self.client.session
+        session["oauth_provider"] = "github"
+        session["oauth_user"] = {
+            "id": "8675309",
+            "login": "xmaxx-operator",
+            "name": "XMAXX Operator",
+            "email": "operator@xmaxx.ai",
+            "avatar_url": "https://avatars.example/xmaxx-operator.png",
+            "profile_url": "https://github.com/xmaxx-operator",
+        }
+        session.save()
+
+    def test_preorder_signup_creates_record_for_signed_in_user(self):
+        response = self.client.post(
+            "/api/preorders/",
+            data=json.dumps(
+                {
+                    "email": "buyer@xmaxx.ai",
+                    "product": "xmaxx-computer",
+                    "sourcePath": "/computer",
+                }
+            ),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        payload = response.json()
+        self.assertTrue(payload["created"])
+        self.assertEqual(payload["signup"]["email"], "buyer@xmaxx.ai")
+        self.assertEqual(payload["signup"]["provider"], "github")
+        self.assertEqual(payload["signup"]["authLogin"], "xmaxx-operator")
+
+    def test_preorder_signup_updates_existing_email(self):
+        PreorderSignup.objects.create(
+            email="buyer@xmaxx.ai",
+            product="xmaxx-computer",
+            source_path="/old",
+        )
+
+        response = self.client.post(
+            "/api/preorders/",
+            data=json.dumps(
+                {
+                    "email": "buyer@xmaxx.ai",
+                    "product": "xmaxx-computer",
+                    "sourcePath": "/computer",
+                }
+            ),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertFalse(payload["created"])
+        self.assertEqual(payload["signup"]["sourcePath"], "/computer")
+        self.assertEqual(PreorderSignup.objects.count(), 1)
+
+    def test_preorder_signup_allows_anonymous_email_capture(self):
+        self.client.session.flush()
+
+        response = self.client.post(
+            "/api/preorders/",
+            data=json.dumps({"email": "anon@xmaxx.ai", "sourcePath": "/computer"}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        payload = response.json()
+        self.assertEqual(payload["signup"]["provider"], "")
+        self.assertEqual(payload["signup"]["authLogin"], "")
+
+    def test_preorder_signup_rejects_invalid_email(self):
+        response = self.client.post(
+            "/api/preorders/",
+            data=json.dumps({"email": "not-an-email", "sourcePath": "/computer"}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["error"], "validation_error")
+        self.assertIn("email", response.json()["fields"])
