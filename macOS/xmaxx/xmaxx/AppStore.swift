@@ -3986,9 +3986,15 @@ private final class MissionTranscriber {
 
         print("Setting up audio engine at \(Date().timeIntervalSince(startTime))s")
         let inputNode = audioEngine.inputNode
-        let format = inputNode.outputFormat(forBus: 0)
+        let format = inputNode.inputFormat(forBus: 0)
+        print(
+            """
+            Input tap format resolved at \(Date().timeIntervalSince(startTime))s: \
+            \(Int(format.channelCount)) ch, \(format.sampleRate) Hz, \(format.commonFormat.rawValue)
+            """
+        )
         currentUtteranceSampleRate = format.sampleRate
-        currentUtteranceChannelCount = 1
+        currentUtteranceChannelCount = UInt16(max(1, min(format.channelCount, UInt32(UInt16.max))))
         inputNode.removeTap(onBus: 0)
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
             self?.recognitionRequest?.append(buffer)
