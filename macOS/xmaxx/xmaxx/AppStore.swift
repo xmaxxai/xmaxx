@@ -666,6 +666,8 @@ final class AppStore: ObservableObject {
     @Published private(set) var awaitingActionConfirmation: Bool
     @Published private(set) var isAccessibilityGranted: Bool
     @Published private(set) var isScreenRecordingGranted: Bool
+    @Published private(set) var isSpeechRecognitionGranted: Bool
+    @Published private(set) var isMicrophoneGranted: Bool
     @Published var automationStatusMessage: String
     @Published var status: LoopStatus = .idle
     @Published var statusMessage: String
@@ -821,6 +823,8 @@ final class AppStore: ObservableObject {
         awaitingActionConfirmation = false
         isAccessibilityGranted = SystemPermissionPrompter.isAccessibilityGranted()
         isScreenRecordingGranted = SystemPermissionPrompter.isScreenRecordingGranted()
+        isSpeechRecognitionGranted = SystemPermissionPrompter.isSpeechRecognitionGranted()
+        isMicrophoneGranted = SystemPermissionPrompter.isMicrophoneGranted()
         automationStatusMessage = "Checking automation capabilities."
         maxIterations = storedMaxIterations == 0 ? 5 : min(storedMaxIterations, 12)
         currentIteration = 0
@@ -1083,6 +1087,8 @@ final class AppStore: ObservableObject {
 
         Task.detached(priority: .utility) {
             _ = SystemPermissionPrompter.requestScreenRecordingAccessIfNeeded()
+            _ = await SystemPermissionPrompter.requestSpeechRecognitionAccessIfNeeded()
+            _ = await SystemPermissionPrompter.requestMicrophoneAccessIfNeeded()
 
             await MainActor.run {
                 self.refreshPermissionStatuses()
@@ -1093,6 +1099,8 @@ final class AppStore: ObservableObject {
     func refreshPermissionStatuses() {
         isAccessibilityGranted = SystemPermissionPrompter.isAccessibilityGranted()
         isScreenRecordingGranted = SystemPermissionPrompter.isScreenRecordingGranted()
+        isSpeechRecognitionGranted = SystemPermissionPrompter.isSpeechRecognitionGranted()
+        isMicrophoneGranted = SystemPermissionPrompter.isMicrophoneGranted()
         refreshAutomationStatusMessage()
     }
 
@@ -1136,6 +1144,54 @@ final class AppStore: ObservableObject {
         }
 
         NSWorkspace.shared.open(url)
+    }
+
+    func requestSpeechRecognitionPermission() {
+        refreshPermissionStatuses()
+
+        Task {
+            let granted = await SystemPermissionPrompter.requestSpeechRecognitionAccessIfNeeded()
+            refreshPermissionStatuses()
+            statusMessage = granted
+                ? "Speech Recognition access is granted."
+                : "Speech Recognition permission is still missing. Approve xmaxx in System Settings > Privacy & Security > Speech Recognition."
+        }
+    }
+
+    func openSpeechRecognitionSettings() {
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_SpeechRecognition") else {
+            return
+        }
+
+        NSWorkspace.shared.open(url)
+    }
+
+    func requestMicrophonePermission() {
+        refreshPermissionStatuses()
+
+        Task {
+            let granted = await SystemPermissionPrompter.requestMicrophoneAccessIfNeeded()
+            refreshPermissionStatuses()
+            statusMessage = granted
+                ? "Microphone access is granted."
+                : "Microphone permission is still missing. Approve xmaxx in System Settings > Privacy & Security > Microphone."
+        }
+    }
+
+    func openMicrophoneSettings() {
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone") else {
+            return
+        }
+
+        NSWorkspace.shared.open(url)
+    }
+
+    func requestAllPermissions() {
+        triggerPermissionProbesIfNeeded()
+        requestAccessibilityPermission()
+        requestScreenRecordingPermission()
+        requestSpeechRecognitionPermission()
+        requestMicrophonePermission()
     }
 
     func autoStartIfPossible() {
@@ -1493,9 +1549,11 @@ final class AppStore: ObservableObject {
     private func refreshAutomationStatusMessage() {
         let accessibilityStatus = isAccessibilityGranted ? "Accessibility is granted." : "Accessibility is missing."
         let screenStatus = isScreenRecordingGranted ? "Screen Recording is granted." : "Screen Recording is missing."
+        let speechStatus = isSpeechRecognitionGranted ? "Speech Recognition is granted." : "Speech Recognition is missing."
+        let microphoneStatus = isMicrophoneGranted ? "Microphone is granted." : "Microphone is missing."
 
         automationStatusMessage = """
-        \(accessibilityStatus) \(screenStatus) Mouse automation only works after Accessibility approval. Screen-based coordinate finding only works after Screen Recording approval.
+        \(accessibilityStatus) \(screenStatus) \(speechStatus) \(microphoneStatus) Mouse automation only works after Accessibility approval. Screen-based coordinate finding only works after Screen Recording approval. Live voice capture only works after Speech Recognition and Microphone approval.
         """
     }
 
@@ -1507,6 +1565,8 @@ final class AppStore: ObservableObject {
         refreshPermissionStatuses()
         let accessibilityStatus = isAccessibilityGranted ? "granted" : "missing"
         let screenRecordingStatus = isScreenRecordingGranted ? "granted" : "missing"
+        let speechRecognitionStatus = isSpeechRecognitionGranted ? "granted" : "missing"
+        let microphoneStatus = isMicrophoneGranted ? "granted" : "missing"
         let pyannoteStatus = pyannoteAPIKey.isEmpty ? "disabled" : "enabled"
         let loadedSkillCount = loadedSkills.count
 
@@ -1516,11 +1576,56 @@ final class AppStore: ObservableObject {
         - Screen coordinate resolver available through find_screen_text. It captures a fresh screenshot, runs OCR, and maps visible text to screen coordinates.
         - Mouse automation uses native HID mouse events from this app and depends on Accessibility permission. Current Accessibility status: \(accessibilityStatus).
         - Screen Recording permission status: \(screenRecordingStatus).
+        - Speech Recognition permission status: \(speechRecognitionStatus).
+        - Microphone permission status: \(microphoneStatus).
         - Screenshot-based coordinate finding depends on Screen Recording approval. Without it, the resolver cannot inspect the desktop.
-        - Live operator steering by voice is available while the loop is running.
+        - Live operator steering by voice depends on Speech Recognition and Microphone approval.
         - pyannote speaker analysis is \(pyannoteStatus).
         - CLI skill markdown files loaded: \(loadedSkillCount). Skills directory: \(skillsDirectoryPath).
         """
+    }
+
+    private func ensureVoiceCapturePermissions() async -> Bool {
+        refreshPermissionStatuses()
+
+        let speechGranted = await SystemPermissionPrompter.requestSpeechRecognitionAccessIfNeeded()
+        let microphoneGranted = await SystemPermissionPrompter.requestMicrophoneAccessIfNeeded()
+        refreshPermissionStatuses()
+
+        guard speechGranted, microphoneGranted else {
+            voiceLoopEnabled = false
+            isRecordingMission = false
+            let missing = missingVoicePermissionSummary()
+            statusMessage = missing
+            recordingStatusMessage = missing
+            updateVoiceFlow(
+                state: .error,
+                title: "Voice permissions missing",
+                detail: missing,
+                transcript: nil
+            )
+            return false
+        }
+
+        return true
+    }
+
+    private func missingVoicePermissionSummary() -> String {
+        var missing: [String] = []
+
+        if !isSpeechRecognitionGranted {
+            missing.append("Speech Recognition")
+        }
+
+        if !isMicrophoneGranted {
+            missing.append("Microphone")
+        }
+
+        if missing.isEmpty {
+            return "Voice capture permission is missing."
+        }
+
+        return "Voice capture cannot start until \(missing.joined(separator: " and ")) access is approved in System Settings > Privacy & Security."
     }
 
     private func applySkillsDirectory(_ directoryURL: URL, isDefault: Bool, statusOverride: String?) {
@@ -1737,13 +1842,26 @@ final class AppStore: ObservableObject {
     func startMissionRecording() {
         voiceLoopEnabled = true
         persistWorkspaceDraft()
+        recordingStatusMessage = "Checking voice permissions before arming the mic."
         updateVoiceFlow(
-            state: .listening,
-            title: "Mic armed",
-            detail: "Live transcript is open. Pause once and the current speech will be committed into the loop.",
+            state: .processing,
+            title: "Checking permissions",
+            detail: "xmaxx is requesting the permissions needed for live voice capture before opening the transcript.",
             transcript: nil
         )
-        beginMissionListening()
+
+        Task {
+            let permissionsReady = await ensureVoiceCapturePermissions()
+            guard permissionsReady else { return }
+
+            updateVoiceFlow(
+                state: .listening,
+                title: "Mic armed",
+                detail: "Live transcript is open. Pause once and the current speech will be committed into the loop.",
+                transcript: nil
+            )
+            beginMissionListening()
+        }
     }
 
     func confirmPendingActions() {
@@ -4714,6 +4832,14 @@ private enum SystemPermissionPrompter {
         CGPreflightScreenCaptureAccess()
     }
 
+    nonisolated static func isSpeechRecognitionGranted() -> Bool {
+        SFSpeechRecognizer.authorizationStatus() == .authorized
+    }
+
+    nonisolated static func isMicrophoneGranted() -> Bool {
+        AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+    }
+
     nonisolated static func triggerAccessibilityPromptIfNeeded() {
         let options = [
             kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true
@@ -4725,6 +4851,31 @@ private enum SystemPermissionPrompter {
     nonisolated static func requestScreenRecordingAccessIfNeeded() -> Bool {
         guard !CGPreflightScreenCaptureAccess() else { return true }
         return CGRequestScreenCaptureAccess()
+    }
+
+    nonisolated static func requestSpeechRecognitionAccessIfNeeded() async -> Bool {
+        if isSpeechRecognitionGranted() {
+            return true
+        }
+
+        return await withCheckedContinuation { continuation in
+            SFSpeechRecognizer.requestAuthorization { status in
+                continuation.resume(returning: status == .authorized)
+            }
+        }
+    }
+
+    nonisolated static func requestMicrophoneAccessIfNeeded() async -> Bool {
+        switch AVCaptureDevice.authorizationStatus(for: .audio) {
+        case .authorized:
+            return true
+        case .notDetermined:
+            return await AVCaptureDevice.requestAccess(for: .audio)
+        case .denied, .restricted:
+            return false
+        @unknown default:
+            return false
+        }
     }
 }
 

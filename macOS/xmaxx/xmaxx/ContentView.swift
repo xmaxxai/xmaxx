@@ -2193,6 +2193,30 @@ private struct SettingsSheet: View {
                             isGranted: store.isScreenRecordingGranted
                         )
 
+                        permissionRow(
+                            title: "Speech Recognition",
+                            detail: "Required for live transcription. If this is missing, the app cannot turn your speech into mission or steering text.",
+                            isGranted: store.isSpeechRecognitionGranted
+                        )
+
+                        permissionRow(
+                            title: "Microphone",
+                            detail: "Required to capture any audio input at all. If this is missing, the voice loop cannot hear you.",
+                            isGranted: store.isMicrophoneGranted
+                        )
+
+                        HStack(spacing: 10) {
+                            Button("Request All") {
+                                store.requestAllPermissions()
+                            }
+                            .buttonStyle(.borderedProminent)
+
+                            Button("Refresh") {
+                                store.refreshPermissionStatuses()
+                            }
+                            .buttonStyle(.bordered)
+                        }
+
                         HStack(spacing: 10) {
                             Button("Request Accessibility") {
                                 store.requestAccessibilityPermission()
@@ -2216,8 +2240,32 @@ private struct SettingsSheet: View {
                             }
                             .buttonStyle(.bordered)
 
-                            Button("Refresh") {
-                                store.refreshPermissionStatuses()
+                            Button("Request Speech Recognition") {
+                                store.requestSpeechRecognitionPermission()
+                            }
+                            .buttonStyle(.borderedProminent)
+                        }
+
+                        HStack(spacing: 10) {
+                            Button("Open Screen Recording Settings") {
+                                store.openScreenRecordingSettings()
+                            }
+                            .buttonStyle(.bordered)
+
+                            Button("Open Speech Recognition Settings") {
+                                store.openSpeechRecognitionSettings()
+                            }
+                            .buttonStyle(.bordered)
+                        }
+
+                        HStack(spacing: 10) {
+                            Button("Request Microphone") {
+                                store.requestMicrophonePermission()
+                            }
+                            .buttonStyle(.borderedProminent)
+
+                            Button("Open Microphone Settings") {
+                                store.openMicrophoneSettings()
                             }
                             .buttonStyle(.bordered)
                         }
@@ -2235,7 +2283,7 @@ private struct SettingsSheet: View {
                         .padding(14)
                         .background(sheetFieldBackground)
 
-                        Text("If macOS already cached a denial, the system may not show the prompt again. In that case enable xmaxx manually in System Settings > Privacy & Security > Accessibility and Screen Recording.")
+                        Text("If macOS already cached a denial, the system may not show the prompt again. In that case enable xmaxx manually in System Settings > Privacy & Security > Accessibility, Screen Recording, Speech Recognition, and Microphone.")
                             .font(.system(size: 12, weight: .medium, design: .rounded))
                             .foregroundStyle(Color.white.opacity(0.45))
                     }
