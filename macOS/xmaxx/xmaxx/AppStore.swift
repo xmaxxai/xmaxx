@@ -4364,8 +4364,16 @@ private final class SpeechCoordinator: NSObject {
                 let audioData = try await elevenLabsClient.synthesize(text: cleanedText, apiKey: elevenLabsAPIKey)
                 audioPlayer = try AVAudioPlayer(data: audioData)
                 audioPlayer?.delegate = self
-                audioPlayer?.prepareToPlay()
-                audioPlayer?.play()
+                guard let audioPlayer else {
+                    throw ElevenLabsError.invalidAudioData
+                }
+
+                audioPlayer.prepareToPlay()
+                guard audioPlayer.play() else {
+                    self.audioPlayer = nil
+                    throw ElevenLabsError.playbackFailed
+                }
+
                 await waitForPlaybackToFinish()
                 print("Speech synthesis completed at \(Date())")
                 return
@@ -4493,6 +4501,18 @@ private struct ElevenLabsClient {
             throw ElevenLabsError.apiError(apiError?.detail.message ?? "ElevenLabs request failed with status \(httpResponse.statusCode).")
         }
 
+        let contentType = httpResponse.value(forHTTPHeaderField: "Content-Type")?.lowercased() ?? ""
+        let isExpectedAudioType = contentType.isEmpty
+            || contentType.contains("audio/")
+            || contentType.contains("application/octet-stream")
+        guard isExpectedAudioType else {
+            throw ElevenLabsError.invalidAudioData
+        }
+
+        guard !data.isEmpty else {
+            throw ElevenLabsError.invalidAudioData
+        }
+
         return data
     }
 }
@@ -4502,6 +4522,8 @@ private enum ElevenLabsError: LocalizedError {
     case invalidResponse
     case network(URLError)
     case apiError(String)
+    case invalidAudioData
+    case playbackFailed
 
     var errorDescription: String? {
         switch self {
@@ -4513,6 +4535,10 @@ private enum ElevenLabsError: LocalizedError {
             return error.xmaxxDescription(for: "ElevenLabs")
         case let .apiError(message):
             return message
+        case .invalidAudioData:
+            return "ElevenLabs returned audio data that macOS could not play."
+        case .playbackFailed:
+            return "macOS could not start playback for the ElevenLabs response."
         }
     }
 }
