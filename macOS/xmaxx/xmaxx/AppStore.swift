@@ -615,6 +615,22 @@ private struct RecoverySnapshot: Codable {
     }
 }
 
+struct LoadedSkill: Identifiable, Hashable {
+    let fileURL: URL
+    let title: String
+    let summary: String
+    let content: String
+
+    var id: String { fileURL.path }
+    var fileName: String { fileURL.lastPathComponent }
+}
+
+private struct SkillsDirectoryConfiguration {
+    let directoryURL: URL
+    let isDefault: Bool
+    let statusMessage: String?
+}
+
 @MainActor
 final class AppStore: ObservableObject {
     @Published var profileName: String
@@ -623,6 +639,10 @@ final class AppStore: ObservableObject {
     @Published var pyannoteAPIKey: String
     @Published var audioResponsesEnabled: Bool
     @Published var audioDialogueMode: AudioDialogueMode
+    @Published private(set) var skillsDirectoryPath: String
+    @Published private(set) var isUsingDefaultSkillsDirectory: Bool
+    @Published private(set) var loadedSkills: [LoadedSkill]
+    @Published private(set) var skillsStatusMessage: String
     @Published var selectedDecisionModels: [DecisionModel]
     @Published var missionText: String
     @Published var environmentText: String
@@ -671,6 +691,7 @@ final class AppStore: ObservableObject {
     private let pyannoteAPIKeyKey = "pyannoteAPIKey"
     private let audioResponsesEnabledKey = "audioResponsesEnabled"
     private let audioDialogueModeKey = "audioDialogueMode"
+    private let skillsDirectoryBookmarkKey = "skillsDirectoryBookmark"
     private let selectedDecisionModelsKey = "selectedDecisionModels"
     private let missionTextKey = "missionText"
     private let environmentTextKey = "environmentText"
@@ -730,11 +751,16 @@ final class AppStore: ObservableObject {
         let storedOperatorFeedback = userDefaults.string(forKey: operatorFeedbackKey) ?? ""
         let storedMaxIterations = max(1, userDefaults.integer(forKey: maxIterationsKey))
         let storedVoiceLoopEnabled = userDefaults.object(forKey: voiceLoopEnabledKey) as? Bool ?? false
+        let skillsDirectoryConfiguration = Self.resolveSkillsDirectoryConfiguration(
+            from: userDefaults,
+            bookmarkKey: skillsDirectoryBookmarkKey
+        )
         var storedAPIKey = keychain.read(account: chatGPTAPIKeyKey) ?? ""
         var storedElevenLabsAPIKey = keychain.read(account: elevenLabsAPIKeyKey) ?? ""
         var storedPyannoteAPIKey = keychain.read(account: pyannoteAPIKeyKey) ?? ""
         let storedAudioResponsesEnabled = userDefaults.object(forKey: audioResponsesEnabledKey) as? Bool ?? false
         let storedAudioDialogueMode = AudioDialogueMode(rawValue: userDefaults.string(forKey: audioDialogueModeKey) ?? "") ?? .external
+        let resolvedLoadedSkills = Self.loadSkills(from: skillsDirectoryConfiguration.directoryURL)
         let storedDecisionModels = (userDefaults.stringArray(forKey: selectedDecisionModelsKey) ?? [])
             .compactMap(DecisionModel.init(rawValue:))
         let resolvedDecisionModels = storedDecisionModels.isEmpty ? [DecisionModel.ooda] : DecisionModel.allCases.filter { storedDecisionModels.contains($0) }
@@ -765,6 +791,14 @@ final class AppStore: ObservableObject {
         pyannoteAPIKey = storedPyannoteAPIKey
         audioResponsesEnabled = storedAudioResponsesEnabled
         audioDialogueMode = storedAudioDialogueMode
+        skillsDirectoryPath = skillsDirectoryConfiguration.directoryURL.path
+        isUsingDefaultSkillsDirectory = skillsDirectoryConfiguration.isDefault
+        loadedSkills = resolvedLoadedSkills
+        skillsStatusMessage = skillsDirectoryConfiguration.statusMessage ?? Self.makeSkillsStatusMessage(
+            count: resolvedLoadedSkills.count,
+            directoryURL: skillsDirectoryConfiguration.directoryURL,
+            isDefault: skillsDirectoryConfiguration.isDefault
+        )
         selectedDecisionModels = resolvedDecisionModels
         operatorFeedback = storedOperatorFeedback
         isRecordingMission = false
@@ -1290,6 +1324,42 @@ final class AppStore: ObservableObject {
         }
     }
 
+    func chooseSkillsDirectory() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.canCreateDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.directoryURL = URL(fileURLWithPath: skillsDirectoryPath, isDirectory: true)
+
+        guard panel.runModal() == .OK, let selectedURL = panel.url else { return }
+
+        do {
+            let bookmarkData = try selectedURL.bookmarkData(
+                options: [.withSecurityScope],
+                includingResourceValuesForKeys: nil,
+                relativeTo: nil
+            )
+            userDefaults.set(bookmarkData, forKey: skillsDirectoryBookmarkKey)
+            applySkillsDirectory(selectedURL, isDefault: false, statusOverride: nil)
+        } catch {
+            skillsStatusMessage = "Could not save access to the selected skills folder."
+        }
+    }
+
+    func resetSkillsDirectoryToDefault() {
+        userDefaults.removeObject(forKey: skillsDirectoryBookmarkKey)
+        applySkillsDirectory(Self.ensureDefaultSkillsDirectory(), isDefault: true, statusOverride: nil)
+    }
+
+    func reloadSkillsDirectory() {
+        applySkillsDirectory(
+            URL(fileURLWithPath: skillsDirectoryPath, isDirectory: true),
+            isDefault: isUsingDefaultSkillsDirectory,
+            statusOverride: nil
+        )
+    }
+
     func toggleDecisionModel(_ model: DecisionModel) {
         var updatedModels = selectedDecisionModels
 
@@ -1438,6 +1508,7 @@ final class AppStore: ObservableObject {
         let accessibilityStatus = isAccessibilityGranted ? "granted" : "missing"
         let screenRecordingStatus = isScreenRecordingGranted ? "granted" : "missing"
         let pyannoteStatus = pyannoteAPIKey.isEmpty ? "disabled" : "enabled"
+        let loadedSkillCount = loadedSkills.count
 
         return """
         Runtime capability status:
@@ -1448,7 +1519,153 @@ final class AppStore: ObservableObject {
         - Screenshot-based coordinate finding depends on Screen Recording approval. Without it, the resolver cannot inspect the desktop.
         - Live operator steering by voice is available while the loop is running.
         - pyannote speaker analysis is \(pyannoteStatus).
+        - CLI skill markdown files loaded: \(loadedSkillCount). Skills directory: \(skillsDirectoryPath).
         """
+    }
+
+    private func applySkillsDirectory(_ directoryURL: URL, isDefault: Bool, statusOverride: String?) {
+        let normalizedURL = directoryURL.standardizedFileURL
+        skillsDirectoryPath = normalizedURL.path
+        isUsingDefaultSkillsDirectory = isDefault
+        loadedSkills = Self.loadSkills(from: normalizedURL)
+        skillsStatusMessage = statusOverride ?? Self.makeSkillsStatusMessage(
+            count: loadedSkills.count,
+            directoryURL: normalizedURL,
+            isDefault: isDefault
+        )
+    }
+
+    private static func resolveSkillsDirectoryConfiguration(
+        from userDefaults: UserDefaults,
+        bookmarkKey: String
+    ) -> SkillsDirectoryConfiguration {
+        let defaultDirectoryURL = ensureDefaultSkillsDirectory()
+
+        guard let bookmarkData = userDefaults.data(forKey: bookmarkKey) else {
+            return SkillsDirectoryConfiguration(
+                directoryURL: defaultDirectoryURL,
+                isDefault: true,
+                statusMessage: nil
+            )
+        }
+
+        var isStale = false
+
+        do {
+            let directoryURL = try URL(
+                resolvingBookmarkData: bookmarkData,
+                options: [.withSecurityScope],
+                relativeTo: nil,
+                bookmarkDataIsStale: &isStale
+            )
+
+            if isStale {
+                userDefaults.removeObject(forKey: bookmarkKey)
+                return SkillsDirectoryConfiguration(
+                    directoryURL: defaultDirectoryURL,
+                    isDefault: true,
+                    statusMessage: "Saved skills folder access expired. Reverted to the default skills folder."
+                )
+            }
+
+            return SkillsDirectoryConfiguration(
+                directoryURL: directoryURL,
+                isDefault: false,
+                statusMessage: nil
+            )
+        } catch {
+            userDefaults.removeObject(forKey: bookmarkKey)
+            return SkillsDirectoryConfiguration(
+                directoryURL: defaultDirectoryURL,
+                isDefault: true,
+                statusMessage: "Saved skills folder could not be reopened. Reverted to the default skills folder."
+            )
+        }
+    }
+
+    private static func ensureDefaultSkillsDirectory() -> URL {
+        let applicationSupportURL = FileManager.default.urls(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask
+        ).first ?? FileManager.default.homeDirectoryForCurrentUser
+
+        let directoryURL = applicationSupportURL
+            .appendingPathComponent("xmaxx", isDirectory: true)
+            .appendingPathComponent("skills", isDirectory: true)
+
+        try? FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        return directoryURL
+    }
+
+    private static func loadSkills(from directoryURL: URL) -> [LoadedSkill] {
+        let accessedResource = directoryURL.startAccessingSecurityScopedResource()
+        defer {
+            if accessedResource {
+                directoryURL.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        let resourceKeys: Set<URLResourceKey> = [.isRegularFileKey]
+        let enumerator = FileManager.default.enumerator(
+            at: directoryURL,
+            includingPropertiesForKeys: Array(resourceKeys),
+            options: [.skipsHiddenFiles]
+        )
+
+        var loadedSkills: [LoadedSkill] = []
+
+        while let fileURL = enumerator?.nextObject() as? URL {
+            guard fileURL.pathExtension.lowercased() == "md" else { continue }
+            guard
+                let resourceValues = try? fileURL.resourceValues(forKeys: resourceKeys),
+                resourceValues.isRegularFile == true
+            else {
+                continue
+            }
+
+            guard let content = try? String(contentsOf: fileURL, encoding: .utf8) else { continue }
+            let trimmedContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedContent.isEmpty else { continue }
+
+            let metadata = parseSkillMetadata(from: trimmedContent, fallbackName: fileURL.deletingPathExtension().lastPathComponent)
+            loadedSkills.append(
+                LoadedSkill(
+                    fileURL: fileURL,
+                    title: metadata.title,
+                    summary: metadata.summary,
+                    content: trimmedContent
+                )
+            )
+        }
+
+        return loadedSkills.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+    }
+
+    private static func parseSkillMetadata(from content: String, fallbackName: String) -> (title: String, summary: String) {
+        let lines = content
+            .components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+        let title = lines.first(where: { $0.hasPrefix("# ") })
+            .map { String($0.dropFirst(2)).trimmingCharacters(in: .whitespacesAndNewlines) }
+            ?? fallbackName
+
+        let summary = lines.first(where: { line in
+            !line.isEmpty && !line.hasPrefix("#") && !line.hasPrefix("-") && !line.hasPrefix("*")
+        }) ?? "CLI skill documentation available."
+
+        return (title, summary)
+    }
+
+    private static func makeSkillsStatusMessage(count: Int, directoryURL: URL, isDefault: Bool) -> String {
+        let folderLabel = isDefault ? "default skills folder" : "custom skills folder"
+        let skillWord = count == 1 ? "skill" : "skills"
+
+        if count == 0 {
+            return "No `.md` skills found in the \(folderLabel) at \(directoryURL.path)."
+        }
+
+        return "Loaded \(count) \(skillWord) from the \(folderLabel) at \(directoryURL.path)."
     }
 
     func stopLoop() {
@@ -2296,7 +2513,8 @@ final class AppStore: ObservableObject {
                 iteration: iteration,
                 maxIterations: limit,
                 priorCycles: history,
-                decisionProfile: decisionProfile
+                decisionProfile: decisionProfile,
+                loadedSkills: loadedSkills
             )
             print("API call completed for cycle \(iteration) at \(Date())")
 
@@ -3023,7 +3241,8 @@ private struct OpenAIClient {
         iteration: Int,
         maxIterations: Int,
         priorCycles: [NavigationCycle],
-        decisionProfile: DecisionProfile
+        decisionProfile: DecisionProfile,
+        loadedSkills: [LoadedSkill]
     ) async throws -> GeneratedLoop {
         guard let url = URL(string: "https://api.openai.com/v1/responses") else {
             throw OpenAIClientError.invalidRequest
@@ -3032,6 +3251,7 @@ private struct OpenAIClient {
         let stagePrompt = decisionProfile.stages.map { stage in
             "- \(stage.phase.rawValue) => \(stage.title): \(stage.shortLabel) \(stage.instruction)"
         }.joined(separator: "\n")
+        let skillPrompt = makeSkillPrompt(from: loadedSkills)
 
         let systemPrompt = """
         You are the planning core for xmaxx, a live macOS desktop copilot.
@@ -3095,6 +3315,7 @@ private struct OpenAIClient {
         Only mark the loop blocked for automation when coordinates are missing, Accessibility permission is missing, or a real tool execution error occurs.
         Treat prior action outputs as ground truth. Do not repeat the same blocked action with the same target unless the new cycle explains what changed.
         Actions must be in execution order. Mark only the immediate next executable step as ready. Keep downstream or contingent steps queued.
+        \(skillPrompt)
         """
 
         let operatorName = profileName.isEmpty ? "Operator" : profileName
@@ -3228,6 +3449,48 @@ private struct OpenAIClient {
                 )
             }
         )
+    }
+
+    private func makeSkillPrompt(from loadedSkills: [LoadedSkill]) -> String {
+        guard !loadedSkills.isEmpty else {
+            return """
+            No external markdown CLI skills are currently loaded.
+            """
+        }
+
+        var remainingBudget = 12_000
+        var skillBlocks: [String] = []
+
+        for skill in loadedSkills {
+            guard remainingBudget > 0 else { break }
+
+            let sanitizedContent = skill.content
+                .replacingOccurrences(of: "\r\n", with: "\n")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let truncatedContent = String(sanitizedContent.prefix(min(remainingBudget, 2_400)))
+            let block = """
+            Skill: \(skill.title)
+            File: \(skill.fileName)
+            Summary: \(skill.summary)
+            Markdown guidance:
+            \(truncatedContent)
+            """
+            skillBlocks.append(block)
+            remainingBudget -= block.count
+        }
+
+        let skillCount = loadedSkills.count
+        let skillWord = skillCount == 1 ? "skill" : "skills"
+
+        return """
+        Loaded CLI skills:
+        - \(skillCount) markdown \(skillWord) are available below.
+        - These skills are documentation, not executables. They describe how external CLI programs can be called.
+        - When a skill is relevant, follow its documented invocation pattern and emit the exact CLI in a shell_command action target.
+        - Do not invent undocumented flags, subcommands, or skill behavior.
+
+        \(skillBlocks.joined(separator: "\n\n"))
+        """
     }
 }
 

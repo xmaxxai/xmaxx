@@ -23,13 +23,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        if let appIcon = NSImage(named: NSImage.Name("AppIcon")) {
+            NSApp.applicationIconImage = appIcon
+        }
+
         let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
         if let button = statusItem.button {
-            let image = NSImage(named: NSImage.Name("AppIcon")) ?? NSApp.applicationIconImage
-            image?.isTemplate = false
+            let menuBarThickness = NSStatusBar.system.thickness
+            let iconSideLength = max(16, menuBarThickness - 6)
+            let image = makeStatusBarIcon(sideLength: iconSideLength)
+
             button.image = image
             button.imagePosition = .imageOnly
+            button.imageScaling = .scaleProportionallyDown
             button.toolTip = "xmaxx"
         }
 
@@ -61,5 +68,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func quitApp() {
         NSApp.terminate(nil)
+    }
+
+    private func makeStatusBarIcon(sideLength: CGFloat) -> NSImage? {
+        guard let sourceImage = NSImage(named: NSImage.Name("AppIcon")) ?? NSApp.applicationIconImage else {
+            return nil
+        }
+
+        let targetSize = NSSize(width: sideLength, height: sideLength)
+        let resizedImage = NSImage(size: targetSize)
+        resizedImage.lockFocus()
+        NSGraphicsContext.current?.imageInterpolation = .high
+        sourceImage.draw(
+            in: NSRect(origin: .zero, size: targetSize),
+            from: .zero,
+            operation: .copy,
+            fraction: 1
+        )
+        resizedImage.unlockFocus()
+        resizedImage.isTemplate = false
+        return resizedImage
     }
 }
