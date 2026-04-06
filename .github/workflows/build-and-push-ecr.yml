@@ -59,6 +59,10 @@ jobs:
         with:
           context: ${{ matrix.context }}
           platforms: linux/amd64,linux/arm64
+          build-args: |
+            VITE_STRIPE_PRODUCT_ID=${{ vars.VITE_STRIPE_PRODUCT_ID }}
+            VITE_STRIPE_PAYMENT_LINK=${{ secrets.VITE_STRIPE_PAYMENT_LINK }}
+            VITE_XMAXX_DEVELOPER_COMMUNITY_URL=${{ vars.VITE_XMAXX_DEVELOPER_COMMUNITY_URL }}
           provenance: false
           sbom: false
           push: true
