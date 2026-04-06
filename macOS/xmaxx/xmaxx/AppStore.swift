@@ -2487,7 +2487,7 @@ final class AppStore: ObservableObject {
 
     private func requiresActionConfirmation(for actions: [ActionItem]) -> Bool {
         actions.contains { action in
-            action.status == .ready && isExecutableActionTool(action.tool)
+            action.status == .ready && requiresOperatorApproval(for: action.tool)
         }
     }
 
@@ -2503,6 +2503,94 @@ final class AppStore: ObservableObject {
     private func isExecutableActionTool(_ tool: String) -> Bool {
         let normalizedTool = tool.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         return normalizedTool == "mouse_move" || normalizedTool == "mouse_click" || normalizedTool == "mouse_right_click"
+    }
+
+    private func requiresOperatorApproval(for tool: String) -> Bool {
+        let normalizedTool = tool.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return normalizedTool == "mouse_click" || normalizedTool == "mouse_right_click"
+    }
+
+    private func detectNavigationLoop(
+        currentActions: [ActionItem],
+        currentProgress: Double,
+        history: [NavigationCycle]
+    ) -> (question: String, detail: String, internalNote: String)? {
+        let recentCycles = Array(history.suffix(2))
+        guard recentCycles.count == 2 else { return nil }
+
+        let priorProgress = recentCycles.map(\.progress)
+        let progressStalled = priorProgress.allSatisfy { currentProgress <= $0 + 0.02 }
+
+        let currentReadySignature = readyActionSignature(from: currentActions)
+        let repeatedReadyAction =
+            !currentReadySignature.isEmpty &&
+            recentCycles.allSatisfy { readyActionSignature(from: $0.actions) == currentReadySignature }
+
+        if progressStalled && repeatedReadyAction {
+            let actionLabel = describeActionSignature(currentReadySignature)
+            return (
+                question: "I am repeating \(actionLabel) without meaningful progress. Should I stop, keep probing, or try a different target?",
+                detail: "The last few cycles converged on the same ready navigation step while progress stayed flat.",
+                internalNote: "Repeated ready navigation action detected with stalled progress. Pause for operator direction instead of looping."
+            )
+        }
+
+        let currentBlockedSignature = blockedActionSignature(from: currentActions)
+        let repeatedBlockedAction =
+            !currentBlockedSignature.isEmpty &&
+            recentCycles.contains { blockedActionSignature(from: $0.actions) == currentBlockedSignature }
+
+        if repeatedBlockedAction {
+            let actionLabel = describeActionSignature(currentBlockedSignature)
+            return (
+                question: "I am stuck repeating \(actionLabel). Should I stop, wait, or redirect to a different target?",
+                detail: "A blocked navigation step is recurring, so continuing automatically is unlikely to help.",
+                internalNote: "Repeated blocked navigation action detected. Ask for direction rather than retrying the same failed step."
+            )
+        }
+
+        return nil
+    }
+
+    private func readyActionSignature(from actions: [ActionItem]) -> String {
+        actionSignature(
+            from: actions.first(where: { $0.status == .ready && isExecutableActionTool($0.tool) })
+        )
+    }
+
+    private func blockedActionSignature(from actions: [ActionItem]) -> String {
+        actionSignature(
+            from: actions.first(where: { $0.status == .blocked && isExecutableActionTool($0.tool) })
+        )
+    }
+
+    private func actionSignature(from action: ActionItem?) -> String {
+        guard let action else { return "" }
+
+        let tool = action.tool.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let target = action.target.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let coordinates: String
+        if let x = action.x, let y = action.y {
+            coordinates = "@\(Int(x.rounded()))x\(Int(y.rounded()))"
+        } else {
+            coordinates = "@unresolved"
+        }
+
+        return "\(tool)|\(target)|\(coordinates)"
+    }
+
+    private func describeActionSignature(_ signature: String) -> String {
+        guard !signature.isEmpty else { return "the same navigation step" }
+
+        let parts = signature.split(separator: "|", maxSplits: 2).map(String.init)
+        let tool = parts.indices.contains(0) ? parts[0] : "action"
+        let target = parts.indices.contains(1) ? parts[1] : ""
+
+        if target.isEmpty {
+            return tool.replacingOccurrences(of: "_", with: " ")
+        }
+
+        return "\(tool.replacingOccurrences(of: "_", with: " ")) on \"\(target)\""
     }
 
     private func presentOperatorPrompt(_ prompt: OperatorPrompt, initialResponse: String = "") {
@@ -2823,6 +2911,47 @@ final class AppStore: ObservableObject {
                 if shouldReplanAfterOperatorPrompt(answerResult) {
                     status = .running
                     statusMessage = "Operator input received. Replanning with the latest answer."
+                    continue
+                }
+            }
+
+            if !result.objectiveMet, let loopSignal = detectNavigationLoop(
+                currentActions: result.actions,
+                currentProgress: result.progress,
+                history: history
+            ) {
+                let prompt = OperatorPrompt(
+                    kind: .question,
+                    title: "Navigation Loop Check",
+                    question: loopSignal.question,
+                    detail: loopSignal.detail,
+                    proceedLabel: "Send Direction",
+                    reviseLabel: "Stop Loop",
+                    responsePlaceholder: "Tell xmaxx to stop, choose a different target, or add a constraint",
+                    requiresResponse: true
+                )
+                status = .ready
+                statusMessage = prompt.question
+                deliverDialogue(
+                    external: prompt.question,
+                    internal: loopSignal.internalNote,
+                    note: prompt.detail
+                )
+
+                let loopResult = await waitForOperatorPrompt(prompt)
+                try Task.checkCancellation()
+
+                if loopResult.decision == .revise {
+                    status = .ready
+                    statusMessage = "Loop paused after repeated navigation behavior."
+                    loopTask = nil
+                    scheduleMissionListeningRestartIfNeeded()
+                    return
+                }
+
+                if shouldReplanAfterOperatorPrompt(loopResult) {
+                    status = .running
+                    statusMessage = "Direction received. Replanning with the latest operator guidance."
                     continue
                 }
             }
@@ -3526,6 +3655,7 @@ private struct OpenAIClient {
         Produce one decisive guided cycle, not generic strategy commentary.
         Treat operator feedback as live steering from the human. If it changes priorities, constraints, or desired direction, adapt immediately in the next iteration instead of continuing the old plan.
         Keep the loop steerable: prefer small, reversible next moves over long speculative plans when live steering is present.
+        Detect navigation loops explicitly. If the same action or blocker is repeating without meaningful progress, ask for operator direction or recommend stopping instead of continuing the same pattern.
         Every narrative field must reference the actual mission, environment, operator feedback, or prior runtime outputs.
         If the mission or latest steering is ambiguous, set needs_operator_input true, put the exact question in operator_question, and explain in decision_trace why that answer is needed now.
         operator_message is what xmaxx should say out loud to the human right now.
@@ -3580,6 +3710,7 @@ private struct OpenAIClient {
         Only mark the loop blocked for automation when coordinates are missing, Accessibility permission is missing, or a real tool execution error occurs.
         Treat prior action outputs as ground truth. Do not repeat the same blocked action with the same target unless the new cycle explains what changed.
         Actions must be in execution order. Mark only the immediate next executable step as ready. Keep downstream or contingent steps queued.
+        Mouse movement for navigation/probing is low risk. Reserve approval-worthy steps for meaningful clicks, destructive changes, or cases where human direction is genuinely needed.
         \(skillPrompt)
         """
 
