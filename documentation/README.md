@@ -4,6 +4,9 @@ This folder explains what is deployed, how it is operated, and what XMAXX is try
 
 ## Documents
 
+- `xmaxx-whitepaper.md`
+  Full platform whitepaper covering mission, architecture, product direction, hardware concepts, network model, and roadmap.
+
 - `platform-architecture.md`
   What is running today, how traffic flows, and how the AWS, K3s, Docker, Helm, and frontend layers fit together.
 
