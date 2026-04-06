@@ -2084,6 +2084,32 @@ private struct SettingsSheet: View {
                             .padding(.horizontal, 14)
                             .padding(.vertical, 12)
                             .background(sheetFieldBackground)
+
+                        NavigationLink {
+                            SkillsConfigView(store: store)
+                        } label: {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Skills Configuration")
+                                        .font(.system(size: 14, weight: .bold, design: .rounded))
+                                        .foregroundStyle(.white)
+
+                                    Text(store.skillsStatusMessage)
+                                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                                        .foregroundStyle(Color.white.opacity(0.55))
+                                        .lineLimit(3)
+                                }
+
+                                Spacer()
+
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 12, weight: .bold))
+                                    .foregroundStyle(Color.white.opacity(0.45))
+                            }
+                            .padding(14)
+                            .background(sheetFieldBackground)
+                        }
+                        .buttonStyle(.plain)
                     }
 
                     VStack(alignment: .leading, spacing: 8) {
@@ -2293,6 +2319,124 @@ private struct SettingsSheet: View {
         }
         .padding(14)
         .background(sheetFieldBackground)
+    }
+}
+
+private struct SkillsConfigView: View {
+    @ObservedObject var store: AppStore
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Skills Folder")
+                        .font(.system(size: 14, weight: .bold, design: .rounded))
+                        .foregroundStyle(Color.white.opacity(0.58))
+
+                    Text(store.skillsDirectoryPath)
+                        .font(.system(size: 13, weight: .medium, design: .monospaced))
+                        .foregroundStyle(.white)
+                        .textSelection(.enabled)
+                        .padding(14)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(sheetFieldBackground)
+
+                    Text(store.isUsingDefaultSkillsDirectory ? "Using the app's default skills directory." : "Using a custom skills directory selected in this app.")
+                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .foregroundStyle(Color.white.opacity(0.45))
+                }
+
+                HStack(spacing: 10) {
+                    Button("Choose Folder") {
+                        store.chooseSkillsDirectory()
+                    }
+                    .buttonStyle(.borderedProminent)
+
+                    Button("Use Default Folder") {
+                        store.resetSkillsDirectoryToDefault()
+                    }
+                    .buttonStyle(.bordered)
+
+                    Button("Reload Skills") {
+                        store.reloadSkillsDirectory()
+                    }
+                    .buttonStyle(.bordered)
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Status")
+                        .font(.system(size: 14, weight: .bold, design: .rounded))
+                        .foregroundStyle(Color.white.opacity(0.58))
+
+                    Text(store.skillsStatusMessage)
+                        .font(.system(size: 13, weight: .medium, design: .rounded))
+                        .foregroundStyle(Color.white.opacity(0.78))
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(14)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(sheetFieldBackground)
+                }
+
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Loaded Skills")
+                        .font(.system(size: 14, weight: .bold, design: .rounded))
+                        .foregroundStyle(Color.white.opacity(0.58))
+
+                    if store.loadedSkills.isEmpty {
+                        Text("Drop `.md` files into the skills folder. Each file should describe how a CLI tool can be called. The planner will read these docs and use them when composing shell_command actions.")
+                            .font(.system(size: 13, weight: .medium, design: .rounded))
+                            .foregroundStyle(Color.white.opacity(0.60))
+                            .padding(14)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(sheetFieldBackground)
+                    } else {
+                        ForEach(store.loadedSkills) { skill in
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text(skill.title)
+                                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                                    .foregroundStyle(.white)
+
+                                Text(skill.summary)
+                                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                                    .foregroundStyle(Color.white.opacity(0.65))
+                                    .fixedSize(horizontal: false, vertical: true)
+
+                                Text(skill.fileURL.path)
+                                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                                    .foregroundStyle(Color.white.opacity(0.46))
+                                    .textSelection(.enabled)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            .padding(14)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(sheetFieldBackground)
+                        }
+                    }
+                }
+            }
+            .padding(24)
+        }
+        .background(
+            LinearGradient(
+                colors: [
+                    Color(red: 0.08, green: 0.10, blue: 0.15),
+                    Color(red: 0.05, green: 0.07, blue: 0.11)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+        )
+        .navigationTitle("Skills")
+    }
+
+    private var sheetFieldBackground: some View {
+        RoundedRectangle(cornerRadius: 16, style: .continuous)
+            .fill(Color.white.opacity(0.06))
+            .overlay {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(Color.white.opacity(0.10), lineWidth: 1)
+            }
     }
 }
 
