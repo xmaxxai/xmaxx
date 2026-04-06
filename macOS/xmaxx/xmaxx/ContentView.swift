@@ -1699,6 +1699,35 @@ private struct VoiceLoopControl: View {
                 .multilineTextAlignment(.leading)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
+
+            if shouldShowLiveTranscript {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 8) {
+                        Circle()
+                            .fill(transcriptAccent)
+                            .frame(width: 8, height: 8)
+
+                        Text(transcriptTitle)
+                            .font(.system(size: 11, weight: .black, design: .rounded))
+                            .foregroundStyle(transcriptAccent)
+                    }
+
+                    Text(liveTranscriptBody)
+                        .font(.system(size: 14, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.white)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(14)
+                .background(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .fill(transcriptAccent.opacity(0.12))
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .stroke(transcriptAccent.opacity(0.24), lineWidth: 1)
+                }
+            }
         }
     }
 
@@ -1826,6 +1855,49 @@ private struct VoiceLoopControl: View {
         return hasMission
             ? Color(red: 0.35, green: 0.73, blue: 0.96)
             : Color.white.opacity(0.28)
+    }
+
+    private var shouldShowLiveTranscript: Bool {
+        isActive || !store.voiceFlowTranscript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var transcriptTitle: String {
+        let transcript = store.voiceFlowTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+        return transcript.isEmpty ? "Listening Now" : "Live Transcript"
+    }
+
+    private var liveTranscriptBody: String {
+        let transcript = store.voiceFlowTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !transcript.isEmpty {
+            return transcript
+        }
+
+        if store.isRecordingMission {
+            return "Mic is live. Start speaking and your words should appear here before the pause commits them."
+        }
+
+        if isActive {
+            return "Voice loop is arming. If nothing appears here after a few seconds, check microphone and speech-recognition permissions."
+        }
+
+        return "Start the voice loop to see live transcription here."
+    }
+
+    private var transcriptAccent: Color {
+        switch store.voiceFlowState {
+        case .idle:
+            return Color.white.opacity(0.34)
+        case .listening:
+            return Color(red: 0.35, green: 0.73, blue: 0.96)
+        case .captured:
+            return Color(red: 0.98, green: 0.74, blue: 0.28)
+        case .processing:
+            return Color(red: 0.57, green: 0.89, blue: 0.74)
+        case .speaking:
+            return Color(red: 0.92, green: 0.60, blue: 0.26)
+        case .error:
+            return Color(red: 0.99, green: 0.54, blue: 0.44)
+        }
     }
 
     private func controlBadge(title: String, value: String, accent: Color) -> some View {
