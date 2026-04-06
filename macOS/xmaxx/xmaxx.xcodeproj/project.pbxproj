@@ -262,6 +262,8 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = xmaxx;
+				INFOPLIST_KEY_CFBundleName = xmaxx;
 				INFOPLIST_KEY_NSAppleEventsUsageDescription = "xmaxx uses automation to control other apps and carry out computer tasks on your behalf.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 Athena Live LLC. All rights reserved.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "xmaxx listens to your voice to capture the mission and drive the agent.";
@@ -299,6 +301,8 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = xmaxx;
+				INFOPLIST_KEY_CFBundleName = xmaxx;
 				INFOPLIST_KEY_NSAppleEventsUsageDescription = "xmaxx uses automation to control other apps and carry out computer tasks on your behalf.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 Athena Live LLC. All rights reserved.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "xmaxx listens to your voice to capture the mission and drive the agent.";
