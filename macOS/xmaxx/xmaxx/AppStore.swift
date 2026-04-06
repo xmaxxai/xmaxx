@@ -4313,9 +4313,9 @@ private enum MissionTranscriberError: LocalizedError {
         case .unavailable:
             return "Speech recognition is currently unavailable on this Mac."
         case .speechPermissionDenied:
-            return "Speech recognition permission was denied."
+            return "Speech recognition permission was denied. Enable xmaxx in System Settings > Privacy & Security > Speech Recognition."
         case .microphonePermissionDenied:
-            return "Microphone permission was denied."
+            return "Microphone permission was denied. Enable xmaxx in System Settings > Privacy & Security > Microphone."
         }
     }
 }
