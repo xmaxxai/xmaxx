@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { ApiTokensPage, ProfilePage } from './components/ProfileWorkspace'
+import { InteractiveSurface, Reveal, StaggerGroup, StaggerItem } from './components/motion-primitives'
 import './index.css'
 
 const homeNavLinks = [
@@ -1196,7 +1197,7 @@ function VoiceDeck() {
 
 function SiteFooter() {
   return (
-    <footer className="site-footer" aria-label="XMAXX social links">
+    <Reveal as="footer" className="site-footer" aria-label="XMAXX social links">
       <div className="site-footer__copy">
         <p className="eyebrow">XMAXX</p>
         <p>
@@ -1209,7 +1210,7 @@ function SiteFooter() {
           <SocialLink key={link.label} {...link} />
         ))}
       </div>
-    </footer>
+    </Reveal>
   )
 }
 
@@ -1220,7 +1221,7 @@ function HomePage({ authState, onOpenLogin }) {
 
   return (
     <>
-      <section className="hero-panel" id="overview">
+      <Reveal as="section" className="hero-panel" id="overview">
         <div className="hero-copy">
           <p className="eyebrow">MAXX open source project</p>
           <h1>Automate Everything to the MAXX.</h1>
@@ -1255,32 +1256,32 @@ function HomePage({ authState, onOpenLogin }) {
             </a>
           </div>
 
-          <div className="hero-stats">
+          <StaggerGroup className="hero-stats">
             {homeHeroStats.map(({ label, value, detail }) => (
-              <article className="hero-stat" key={label}>
+              <StaggerItem as="article" className="hero-stat" key={label}>
                 <p>{label}</p>
                 <strong>{value}</strong>
                 <span>{detail}</span>
-              </article>
+              </StaggerItem>
             ))}
-          </div>
+          </StaggerGroup>
 
-          <div className="hero-copy__panel">
+          <Reveal className="hero-copy__panel" delay={0.1}>
             <div className="hero-copy__panel-head">
               <p className="section-kicker">Project Focus</p>
               <h2>Open automation core for software, computers, and machines.</h2>
             </div>
 
-            <div className="hero-copy__panel-grid">
+            <StaggerGroup className="hero-copy__panel-grid">
               {heroSurfaceNotes.map(({ label, title, detail }) => (
-                <article className="hero-copy__panel-note" key={title}>
+                <StaggerItem as="article" className="hero-copy__panel-note" key={title}>
                   <span>{label}</span>
                   <strong>{title}</strong>
                   <p>{detail}</p>
-                </article>
+                </StaggerItem>
               ))}
-            </div>
-          </div>
+            </StaggerGroup>
+          </Reveal>
         </div>
 
         <div className="hero-visual">
@@ -1299,9 +1300,9 @@ function HomePage({ authState, onOpenLogin }) {
             </div>
           </div>
         </div>
-      </section>
+      </Reveal>
 
-      <section className="positioning-band" id="platform">
+      <Reveal as="section" className="positioning-band" id="platform">
         <div>
           <p className="eyebrow">Project Summary</p>
           <h2>MAXX is an open source automation project.</h2>
@@ -1317,9 +1318,9 @@ function HomePage({ authState, onOpenLogin }) {
             automation across software, computers, devices, and machine workflows.
           </p>
         </div>
-      </section>
+      </Reveal>
 
-      <section className="section-block" id="customers">
+      <Reveal as="section" className="section-block" id="customers">
         <div className="section-heading">
           <p className="eyebrow">Who It Is For</p>
           <h2>MAXX is for teams that need systems to run with less manual intervention.</h2>
@@ -1329,18 +1330,18 @@ function HomePage({ authState, onOpenLogin }) {
           </p>
         </div>
 
-        <div className="use-case-grid use-case-grid--triad">
+        <StaggerGroup className="use-case-grid use-case-grid--triad">
           {customerSections.map(({ title, description }) => (
-            <article className="use-case-card" key={title}>
+            <InteractiveSurface as={StaggerItem} className="use-case-card" key={title}>
               <p className="section-kicker">Customer</p>
               <h3>{title}</h3>
               <p>{description}</p>
-            </article>
+            </InteractiveSurface>
           ))}
-        </div>
-      </section>
+        </StaggerGroup>
+      </Reveal>
 
-      <section className="section-block" id="offer">
+      <Reveal as="section" className="section-block" id="offer">
         <div className="section-heading">
           <p className="eyebrow">Core Product</p>
           <h2>The core product is automation.</h2>
@@ -1350,18 +1351,18 @@ function HomePage({ authState, onOpenLogin }) {
           </p>
         </div>
 
-        <div className="use-case-grid use-case-grid--triad">
+        <StaggerGroup className="use-case-grid use-case-grid--triad">
           {offerSections.map(({ title, description }) => (
-            <article className="use-case-card" key={title}>
+            <InteractiveSurface as={StaggerItem} className="use-case-card" key={title}>
               <p className="section-kicker">Offer</p>
               <h3>{title}</h3>
               <p>{description}</p>
-            </article>
+            </InteractiveSurface>
           ))}
-        </div>
-      </section>
+        </StaggerGroup>
+      </Reveal>
 
-      <section className="section-block" id="developer-access">
+      <Reveal as="section" className="section-block" id="developer-access">
         <div className="section-heading">
           <p className="eyebrow">Developer Access</p>
           <h2>XMAXX Developer Access</h2>
@@ -1468,9 +1469,9 @@ function HomePage({ authState, onOpenLogin }) {
             ) : null}
           </aside>
         </div>
-      </section>
+      </Reveal>
 
-      <section className="section-block">
+      <Reveal as="section" className="section-block">
         <div className="section-heading">
           <p className="eyebrow">Current Scope</p>
           <h2>What the project covers today.</h2>
@@ -1479,14 +1480,16 @@ function HomePage({ authState, onOpenLogin }) {
           </p>
         </div>
 
-        <div className="spec-grid spec-grid--scope">
+        <StaggerGroup className="spec-grid spec-grid--scope">
           {scopePoints.map((section) => (
-            <SpecCard key={section.title} {...section} />
+            <InteractiveSurface as={StaggerItem} key={section.title}>
+              <SpecCard {...section} />
+            </InteractiveSurface>
           ))}
-        </div>
-      </section>
+        </StaggerGroup>
+      </Reveal>
 
-      <section className="section-block" id="automation">
+      <Reveal as="section" className="section-block" id="automation">
         <div className="section-heading">
           <p className="eyebrow">Automation Focus</p>
           <h2>The project exists to automate as much practical work as possible.</h2>
@@ -1496,18 +1499,18 @@ function HomePage({ authState, onOpenLogin }) {
           </p>
         </div>
 
-        <div className="use-case-grid">
+        <StaggerGroup className="use-case-grid">
           {buildUseCases.map(({ title, description }) => (
-            <article className="use-case-card" key={title}>
+            <InteractiveSurface as={StaggerItem} className="use-case-card" key={title}>
               <p className="section-kicker">Automation Area</p>
               <h3>{title}</h3>
               <p>{description}</p>
-            </article>
+            </InteractiveSurface>
           ))}
-        </div>
-      </section>
+        </StaggerGroup>
+      </Reveal>
 
-      <section className="section-block" id="how-it-works">
+      <Reveal as="section" className="section-block" id="how-it-works">
         <div className="section-heading">
           <p className="eyebrow">Built for Operators</p>
           <h2>Input to Agent to Execution to Feedback</h2>
@@ -1517,14 +1520,16 @@ function HomePage({ authState, onOpenLogin }) {
           </p>
         </div>
 
-        <div className="spec-grid">
+        <StaggerGroup className="spec-grid">
           {operatorFlowSections.map((section) => (
-            <SpecCard key={section.title} {...section} />
+            <InteractiveSurface as={StaggerItem} key={section.title}>
+              <SpecCard {...section} />
+            </InteractiveSurface>
           ))}
-        </div>
-      </section>
+        </StaggerGroup>
+      </Reveal>
 
-      <section className="section-block" id="open-source">
+      <Reveal as="section" className="section-block" id="open-source">
         <div className="section-heading">
           <p className="eyebrow">Open Source</p>
           <h2>The project is open, and the product direction stays visible.</h2>
@@ -1534,11 +1539,13 @@ function HomePage({ authState, onOpenLogin }) {
           </p>
         </div>
 
-        <div className="spec-grid spec-grid--triad">
+        <StaggerGroup className="spec-grid spec-grid--triad">
           {proofSections.map((section) => (
-            <SpecCard key={section.title} {...section} />
+            <InteractiveSurface as={StaggerItem} key={section.title}>
+              <SpecCard {...section} />
+            </InteractiveSurface>
           ))}
-        </div>
+        </StaggerGroup>
 
         <div className="hero-actions">
           <a
@@ -1550,9 +1557,9 @@ function HomePage({ authState, onOpenLogin }) {
             GitHub repo
           </a>
         </div>
-      </section>
+      </Reveal>
 
-      <section className="closing-panel">
+      <Reveal as="section" className="closing-panel">
         <p className="eyebrow">Product Page</p>
         <h2>XMAXX Computer is the current product page.</h2>
         <p>
@@ -1573,7 +1580,7 @@ function HomePage({ authState, onOpenLogin }) {
             View GitHub
           </a>
         </div>
-      </section>
+      </Reveal>
 
       <SiteFooter />
     </>
